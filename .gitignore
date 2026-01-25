@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Build outputs
+dist/
+build/
+.cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+nul
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Capacitor
+android/
+ios/
+
+# XAMPP default files
+xampp/
+dashboard/
+img/
+applications.html
+bitnami.css
+favicon.ico
+index.php
+
+# Backup files
+*.bak
+backups/
+
+# Railway
+.railway/
