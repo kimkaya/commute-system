@@ -1,0 +1,8 @@
+{
+    "input": "img_20260115_130646_6968d85642c6e.JPG",
+    "output": "gen_img_20260115_130646_6968d85642c6e_ghibli.png",
+    "style": "ghibli",
+    "strength": 0.5,
+    "prompt": "studio ghibli style, ghibli anime, hayao miyazaki style, soft colors, detailed background, whimsical, anime style",
+    "created_at": "2026-01-15 13:06:55"
+}

@@ -1,0 +1,8 @@
+{
+    "input": "img_20260115_130230_6968d75649905.JPG",
+    "output": "gen_img_20260115_130230_6968d75649905_anime.png",
+    "style": "anime",
+    "strength": 0.2,
+    "prompt": "anime style, anime artwork, vibrant colors, detailed anime illustration, high quality anime art",
+    "created_at": "2026-01-15 13:02:42"
+}
