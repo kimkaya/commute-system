@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
+  <title>출퇴근 관리자</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- 로그인 화면 -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-box">
+      <h1>관리자 로그인</h1>
+      <p class="login-desc">비밀번호를 입력하세요</p>
+      <input type="password" id="passwordInput" maxlength="10" placeholder="비밀번호" autofocus>
+      <button id="loginBtn" class="btn btn-primary">로그인</button>
+      <p id="loginError" class="login-error"></p>
+      <p id="failCount" class="fail-count"></p>
+    </div>
+  </div>
+
+  <!-- 관리자 화면 -->
+  <div id="adminScreen" class="admin-screen hidden">
+    <header>
+      <h1>출퇴근 관리자</h1>
+      <button id="logoutBtn" class="btn btn-small">로그아웃</button>
+    </header>
+
+    <!-- 탭 메뉴 -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="records">출퇴근 기록</button>
+      <button class="tab-btn" data-tab="employees">직원 관리</button>
+      <button class="tab-btn" data-tab="leave">휴가 관리</button>
+      <button class="tab-btn" data-tab="payroll">급여 관리</button>
+      <button class="tab-btn" data-tab="compliance">근로기준법</button>
+      <button class="tab-btn" data-tab="settings">설정</button>
+    </div>
+
+    <!-- 출퇴근 기록 탭 -->
+    <div id="recordsTab" class="tab-content active">
+      <div class="toolbar">
+        <div class="filter-group">
+          <label>기간:</label>
+          <input type="date" id="startDate">
+          <span>~</span>
+          <input type="date" id="endDate">
+          <select id="userFilter">
+            <option value="">전체 직원</option>
+          </select>
+          <button id="filterBtn" class="btn btn-small">조회</button>
+        </div>
+        <button id="exportBtn" class="btn btn-success">엑셀 저장</button>
+      </div>
+
+      <div class="table-container">
+        <table id="recordsTable">
+          <thead>
+            <tr>
+              <th>날짜</th>
+              <th>이름</th>
+              <th>출근</th>
+              <th>퇴근</th>
+              <th>휴식(분)</th>
+              <th>실근무</th>
+              <th>수정</th>
+            </tr>
+          </thead>
+          <tbody id="recordsBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 직원 관리 탭 -->
+    <div id="employeesTab" class="tab-content">
+      <div class="toolbar">
+        <span class="toolbar-title">등록된 직원 목록</span>
+        <button id="addEmployeeBtn" class="btn btn-success">직원 추가</button>
+      </div>
+
+      <div class="table-container">
+        <table id="employeesTable">
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>등록일</th>
+              <th>얼굴 샘플</th>
+              <th>비밀번호</th>
+              <th>삭제</th>
+            </tr>
+          </thead>
+          <tbody id="employeesBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 휴가 관리 탭 -->
+    <div id="leaveTab" class="tab-content">
+      <div class="toolbar">
+        <div class="filter-group">
+          <label>직원:</label>
+          <select id="leaveUserFilter">
+            <option value="">전체 직원</option>
+          </select>
+          <label>연도:</label>
+          <select id="leaveYearFilter">
+            <option value="2024">2024</option>
+            <option value="2025" selected>2025</option>
+            <option value="2026">2026</option>
+          </select>
+          <button id="leaveFilterBtn" class="btn btn-small">조회</button>
+        </div>
+        <button id="addLeaveBtn" class="btn btn-success">휴가 신청</button>
+      </div>
+
+      <!-- 연차 현황 요약 -->
+      <div class="leave-summary">
+        <div class="summary-grid">
+          <div class="summary-card">
+            <h3>📅 연차 현황</h3>
+            <div class="summary-stats">
+              <div class="stat-item">
+                <span class="stat-label">총 부여일수</span>
+                <span id="totalAnnualLeave" class="stat-value">15일</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">사용일수</span>
+                <span id="usedAnnualLeave" class="stat-value">3일</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">잔여일수</span>
+                <span id="remainingAnnualLeave" class="stat-value">12일</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="summary-card">
+            <h3>🏥 기타 휴가</h3>
+            <div class="summary-stats">
+              <div class="stat-item">
+                <span class="stat-label">병가</span>
+                <span id="usedSickLeave" class="stat-value">1일</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">경조사</span>
+                <span id="usedFamilyLeave" class="stat-value">2일</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">기타</span>
+                <span id="usedOtherLeave" class="stat-value">0일</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 휴가 신청 목록 -->
+      <div class="table-container">
+        <table id="leaveTable">
+          <thead>
+            <tr>
+              <th>직원명</th>
+              <th>휴가종류</th>
+              <th>시작일</th>
+              <th>종료일</th>
+              <th>일수</th>
+              <th>사유</th>
+              <th>상태</th>
+              <th>승인자</th>
+              <th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="leaveBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 급여 관리 탭 -->
+    <div id="payrollTab" class="tab-content">
+      <div class="toolbar">
+        <div class="filter-group">
+          <label>직원:</label>
+          <select id="payrollUserFilter">
+            <option value="">전체 직원</option>
+          </select>
+          <label>연월:</label>
+          <input type="month" id="payrollMonth" value="">
+          <button id="payrollFilterBtn" class="btn btn-small">조회</button>
+        </div>
+        <button id="calculatePayrollBtn" class="btn btn-success">급여 계산</button>
+      </div>
+
+      <!-- 급여 요약 정보 -->
+      <div class="payroll-summary">
+        <div class="summary-grid">
+          <div class="summary-card">
+            <h3>💰 이번 달 급여 현황</h3>
+            <div class="summary-stats">
+              <div class="stat-item">
+                <span class="stat-label">총 지급액</span>
+                <span id="totalGrossPay" class="stat-value">0원</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">기본급 합계</span>
+                <span id="totalBasePay" class="stat-value">0원</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">수당 합계</span>
+                <span id="totalAllowances" class="stat-value">0원</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">공제 합계</span>
+                <span id="totalDeductions" class="stat-value">0원</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="summary-card">
+            <h3>⏰ 근무시간 요약</h3>
+            <div class="summary-stats">
+              <div class="stat-item">
+                <span class="stat-label">정규 근무</span>
+                <span id="totalRegularHours" class="stat-value">0시간</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">연장 근무</span>
+                <span id="totalOvertimeHours" class="stat-value">0시간</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">야간 근무</span>
+                <span id="totalNightHours" class="stat-value">0시간</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">휴일 근무</span>
+                <span id="totalHolidayHours" class="stat-value">0시간</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 급여 명세서 테이블 -->
+      <div class="table-container">
+        <table id="payrollTable">
+          <thead>
+            <tr>
+              <th>직원명</th>
+              <th>시급</th>
+              <th>정규시간</th>
+              <th>연장시간</th>
+              <th>야간시간</th>
+              <th>기본급</th>
+              <th>연장수당</th>
+              <th>야간수당</th>
+              <th>기타수당</th>
+              <th>총지급액</th>
+              <th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="payrollBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 근로기준법 체크 탭 -->
+    <div id="complianceTab" class="tab-content">
+      <div class="toolbar">
+        <div class="filter-group">
+          <label>기간:</label>
+          <input type="week" id="complianceWeek">
+          <button id="complianceCheckBtn" class="btn btn-small">점검</button>
+        </div>
+        <button id="exportComplianceBtn" class="btn btn-secondary">점검결과 내보내기</button>
+      </div>
+
+      <!-- 법규 위반 알림 -->
+      <div id="complianceAlerts" class="compliance-alerts">
+        <div class="alert-card critical hidden" id="criticalAlerts">
+          <h3>🚨 심각한 위반사항</h3>
+          <ul id="criticalAlertsList"></ul>
+        </div>
+        
+        <div class="alert-card warning hidden" id="warningAlerts">
+          <h3>⚠️ 주의사항</h3>
+          <ul id="warningAlertsList"></ul>
+        </div>
+        
+        <div class="alert-card info hidden" id="infoAlerts">
+          <h3>ℹ️ 정보</h3>
+          <ul id="infoAlertsList"></ul>
+        </div>
+      </div>
+
+      <!-- 근로시간 현황 -->
+      <div class="compliance-summary">
+        <div class="summary-grid">
+          <div class="summary-card">
+            <h3>📊 주간 근로시간 (법정 40시간)</h3>
+            <div class="compliance-chart">
+              <canvas id="weeklyHoursChart" width="400" height="200"></canvas>
+            </div>
+          </div>
+          
+          <div class="summary-card">
+            <h3>🕐 연장근무 현황</h3>
+            <div class="overtime-stats">
+              <div class="stat-item">
+                <span class="stat-label">주간 연장 한도 (12시간)</span>
+                <span id="weeklyOvertimeStatus" class="stat-value">0/12시간</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">월간 연장 한도 (52시간)</span>
+                <span id="monthlyOvertimeStatus" class="stat-value">0/52시간</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 직원별 근로기준법 준수 현황 -->
+      <div class="table-container">
+        <table id="complianceTable">
+          <thead>
+            <tr>
+              <th>직원명</th>
+              <th>주간근무</th>
+              <th>주간연장</th>
+              <th>월간연장</th>
+              <th>연속근무일</th>
+              <th>휴게시간</th>
+              <th>상태</th>
+              <th>조치필요</th>
+            </tr>
+          </thead>
+          <tbody id="complianceBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 설정 탭 -->
+    <div id="settingsTab" class="tab-content">
+      <div class="settings-section">
+        <h3>비밀번호 변경</h3>
+        <div class="form-group">
+          <label>현재 비밀번호</label>
+          <input type="password" id="currentPassword" maxlength="10">
+        </div>
+        <div class="form-group">
+          <label>새 비밀번호</label>
+          <input type="password" id="newPassword" maxlength="10">
+        </div>
+        <div class="form-group">
+          <label>새 비밀번호 확인</label>
+          <input type="password" id="confirmPassword" maxlength="10">
+        </div>
+        <button id="changePasswordBtn" class="btn btn-primary">비밀번호 변경</button>
+        <p id="passwordMessage" class="message"></p>
+      </div>
+
+      <div class="settings-section">
+        <h3>알림 설정</h3>
+        <div class="form-group">
+          <label>주간 데이터 정리 알림 요일</label>
+          <div class="day-selector">
+            <label class="day-option">
+              <input type="radio" name="notificationDay" value="0" id="daySunday">
+              <span>일요일</span>
+            </label>
+            <label class="day-option">
+              <input type="radio" name="notificationDay" value="1" id="dayMonday">
+              <span>월요일</span>
+            </label>
+            <label class="day-option">
+              <input type="radio" name="notificationDay" value="2" id="dayTuesday">
+              <span>화요일</span>
+            </label>
+            <label class="day-option">
+              <input type="radio" name="notificationDay" value="3" id="dayWednesday">
+              <span>수요일</span>
+            </label>
+            <label class="day-option">
+              <input type="radio" name="notificationDay" value="4" id="dayThursday">
+              <span>목요일</span>
+            </label>
+            <label class="day-option">
+              <input type="radio" name="notificationDay" value="5" id="dayFriday" checked>
+              <span>금요일</span>
+            </label>
+            <label class="day-option">
+              <input type="radio" name="notificationDay" value="6" id="daySaturday">
+              <span>토요일</span>
+            </label>
+          </div>
+          <button id="saveNotificationDayBtn" class="btn btn-primary">알림 요일 저장</button>
+          <p id="notificationDayMessage" class="message"></p>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>🏢 근무시간 기준 설정</h3>
+        <div class="work-settings-grid">
+          <div class="form-group">
+            <label>정규 근무시간 (주간)</label>
+            <input type="number" id="weeklyRegularHours" value="40" min="20" max="60">
+            <span class="input-suffix">시간</span>
+          </div>
+          <div class="form-group">
+            <label>정규 출근시간</label>
+            <input type="time" id="standardStartTime" value="09:00">
+          </div>
+          <div class="form-group">
+            <label>정규 퇴근시간</label>
+            <input type="time" id="standardEndTime" value="18:00">
+          </div>
+          <div class="form-group">
+            <label>점심시간 (분)</label>
+            <input type="number" id="lunchBreakMinutes" value="60" min="30" max="120">
+            <span class="input-suffix">분</span>
+          </div>
+          <div class="form-group">
+            <label>지각 허용시간 (분)</label>
+            <input type="number" id="lateTolerance" value="10" min="0" max="30">
+            <span class="input-suffix">분</span>
+          </div>
+          <div class="form-group">
+            <label>야간근무 시작시간</label>
+            <input type="time" id="nightWorkStartTime" value="22:00">
+          </div>
+        </div>
+        
+        <h3>💰 급여 기준 설정</h3>
+        <div class="payroll-settings-grid">
+          <div class="form-group">
+            <label>기본 시급</label>
+            <input type="number" id="defaultHourlyRate" value="10000" min="9620" step="10">
+            <span class="input-suffix">원</span>
+          </div>
+          <div class="form-group">
+            <label>연장근무 수당율</label>
+            <input type="number" id="overtimeRate" value="1.5" min="1.5" max="3" step="0.1">
+            <span class="input-suffix">배</span>
+          </div>
+          <div class="form-group">
+            <label>야간근무 수당율</label>
+            <input type="number" id="nightWorkRate" value="1.5" min="1.5" max="3" step="0.1">
+            <span class="input-suffix">배</span>
+          </div>
+          <div class="form-group">
+            <label>휴일근무 수당율</label>
+            <input type="number" id="holidayWorkRate" value="2.0" min="1.5" max="3" step="0.1">
+            <span class="input-suffix">배</span>
+          </div>
+        </div>
+        <button id="saveWorkSettingsBtn" class="btn btn-primary">근무설정 저장</button>
+        <p id="workSettingsMessage" class="message"></p>
+      </div>
+
+      <div class="settings-section">
+        <h3>💾 자동 백업 설정</h3>
+        <div class="backup-settings">
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="enableAutoBackup" checked>
+              자동 백업 활성화
+            </label>
+          </div>
+          <div class="form-group">
+            <label>백업 주기</label>
+            <select id="backupFrequency">
+              <option value="daily">매일</option>
+              <option value="weekly" selected>매주</option>
+              <option value="monthly">매월</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>백업 시간</label>
+            <input type="time" id="backupTime" value="02:00">
+          </div>
+          <div class="form-group">
+            <label>백업 보관 기간</label>
+            <select id="backupRetentionDays">
+              <option value="7">7일</option>
+              <option value="30" selected>30일</option>
+              <option value="90">90일</option>
+              <option value="365">1년</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>백업 저장 경로</label>
+            <input type="text" id="backupPath" value="./backups" readonly>
+            <button id="selectBackupPathBtn" class="btn btn-small">경로 선택</button>
+          </div>
+        </div>
+        
+        <div class="backup-actions">
+          <button id="manualBackupBtn" class="btn btn-success">수동 백업 실행</button>
+          <button id="restoreBackupBtn" class="btn btn-warning">백업 복원</button>
+          <button id="saveBackupSettingsBtn" class="btn btn-primary">백업설정 저장</button>
+        </div>
+        
+        <div class="backup-status">
+          <h4>백업 현황</h4>
+          <div class="status-grid">
+            <div class="status-item">
+              <span class="label">마지막 백업</span>
+              <span id="lastBackupTime" class="value">없음</span>
+            </div>
+            <div class="status-item">
+              <span class="label">백업 파일 수</span>
+              <span id="backupFileCount" class="value">0개</span>
+            </div>
+            <div class="status-item">
+              <span class="label">총 용량</span>
+              <span id="backupTotalSize" class="value">0MB</span>
+            </div>
+            <div class="status-item">
+              <span class="label">다음 백업</span>
+              <span id="nextBackupTime" class="value">계산중...</span>
+            </div>
+          </div>
+        </div>
+        <p id="backupMessage" class="message"></p>
+      </div>
+
+      <div class="settings-section">
+        <h3>🗑️ 데이터 관리</h3>
+        <p class="warning-text">⚠️ 데이터 삭제는 시스템 사용 중이 아닐 때만 수행하세요</p>
+        <button id="dataCleanupBtn" class="btn btn-danger">데이터 삭제</button>
+        <p id="dataCleanupMessage" class="message"></p>
+        <div id="weeklyNotification" class="notification hidden">
+          <p>📅 데이터 정리를 위해서 데이터삭제 버튼을 눌러주세요<br>(단, 사용중에는 이 버튼을 누르지마세요)</p>
+          <button id="dismissNotificationBtn" class="btn btn-small">확인</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>비밀번호 정책</h3>
+        <p>- 최소 8자 이상</p>
+        <p>- 영문과 숫자를 포함해야 합니다</p>
+        <p>- 5회 로그인 실패 시 30분간 계정이 잠깁니다</p>
+        <p>- 초기 비밀번호: admin1234</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 비밀번호 재설정 모달 -->
+  <div id="resetPasswordModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>직원 비밀번호 재설정</h3>
+      <p id="resetPasswordEmployee" class="modal-user"></p>
+      <div class="form-group">
+        <label>새 비밀번호</label>
+        <input type="password" id="newEmployeePassword" maxlength="20" placeholder="4자리 이상">
+      </div>
+      <div class="form-group">
+        <label>비밀번호 확인</label>
+        <input type="password" id="confirmEmployeePassword" maxlength="20" placeholder="비밀번호 확인">
+      </div>
+      <p id="resetPasswordError" class="modal-error"></p>
+      <div class="modal-buttons">
+        <button id="confirmResetPasswordBtn" class="btn btn-primary">재설정</button>
+        <button id="cancelResetPasswordBtn" class="btn btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 수정 모달 -->
+  <div id="editModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>기록 수정</h3>
+      <div class="form-group">
+        <label>날짜</label>
+        <input type="date" id="editDate">
+      </div>
+      <div class="form-group">
+        <label>이름</label>
+        <select id="editName">
+          <option value="">직원 선택</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>출근 시간</label>
+        <input type="time" id="editCheckIn">
+      </div>
+      <div class="form-group">
+        <label>퇴근 시간</label>
+        <input type="time" id="editCheckOut">
+      </div>
+      <div class="form-group">
+        <label>휴식 시간 (분)</label>
+        <input type="number" id="editBreak" min="0" max="480">
+      </div>
+      <div class="modal-buttons">
+        <button id="saveEditBtn" class="btn btn-primary">저장</button>
+        <button id="cancelEditBtn" class="btn btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 직원 추가 모달 -->
+  <div id="addEmployeeModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>직원 추가</h3>
+      <div class="form-group">
+        <label>이름</label>
+        <input type="text" id="newEmployeeName" maxlength="50" placeholder="이름을 입력하세요">
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="newEmployeePasswordAdd" maxlength="20" placeholder="4자리 이상">
+      </div>
+      <div class="form-group">
+        <label>비밀번호 확인</label>
+        <input type="password" id="confirmEmployeePasswordAdd" maxlength="20" placeholder="비밀번호 확인">
+      </div>
+      <p class="modal-note">※ 얼굴 등록은 출퇴근 프로그램에서 직접 해주세요</p>
+      <p id="addEmployeeError" class="modal-error"></p>
+      <div class="modal-buttons">
+        <button id="confirmAddEmployeeBtn" class="btn btn-primary">추가</button>
+        <button id="cancelAddEmployeeBtn" class="btn btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 데이터 삭제 확인 모달 -->
+  <div id="dataCleanupModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>⚠️ 데이터 삭제 확인</h3>
+      <p class="warning-text">정말 지우시겠습니까?</p>
+      <p class="warning-text">이전 데이터는 복구 불가능합니다.</p>
+      <p class="info-text">(이전 데이터는 컴퓨터에 자동저장됩니다. 작동중에 삭제하지마십시요.)</p>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="confirmDataCleanup">
+          위 내용을 확인했으며 데이터 삭제에 동의합니다
+        </label>
+      </div>
+      <p id="dataCleanupError" class="modal-error"></p>
+      <div class="modal-buttons">
+        <button id="confirmDataCleanupBtn" class="btn btn-danger" disabled>데이터 삭제</button>
+        <button id="cancelDataCleanupBtn" class="btn btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 휴가 신청 모달 -->
+  <div id="addLeaveModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>📅 휴가 신청</h3>
+      <div class="form-group">
+        <label>직원 선택</label>
+        <select id="leaveEmployeeSelect">
+          <option value="">직원을 선택하세요</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>휴가 종류</label>
+        <select id="leaveTypeSelect">
+          <option value="annual">연차</option>
+          <option value="sick">병가</option>
+          <option value="family_event">경조사</option>
+          <option value="maternity">출산휴가</option>
+          <option value="paternity">배우자출산휴가</option>
+          <option value="public">공가</option>
+          <option value="other">기타</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>시작일</label>
+        <input type="date" id="leaveStartDate">
+      </div>
+      <div class="form-group">
+        <label>종료일</label>
+        <input type="date" id="leaveEndDate">
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="leaveIsHalfDay">
+          반차 (0.5일)
+        </label>
+      </div>
+      <div class="form-group">
+        <label>사유</label>
+        <textarea id="leaveReason" placeholder="휴가 사유를 입력하세요" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label>상태</label>
+        <select id="leaveStatus">
+          <option value="pending">대기중</option>
+          <option value="approved">승인</option>
+          <option value="rejected">반려</option>
+        </select>
+      </div>
+      <p id="addLeaveError" class="modal-error"></p>
+      <div class="modal-buttons">
+        <button id="confirmAddLeaveBtn" class="btn btn-primary">신청</button>
+        <button id="cancelAddLeaveBtn" class="btn btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 휴가 승인/반려 모달 -->
+  <div id="leaveApprovalModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>휴가 승인/반려</h3>
+      <div id="leaveApprovalDetails" class="approval-details">
+        <p><strong>신청자:</strong> <span id="approvalEmployeeName"></span></p>
+        <p><strong>휴가종류:</strong> <span id="approvalLeaveType"></span></p>
+        <p><strong>기간:</strong> <span id="approvalLeavePeriod"></span></p>
+        <p><strong>사유:</strong> <span id="approvalLeaveReason"></span></p>
+      </div>
+      <div class="form-group">
+        <label>승인자 의견</label>
+        <textarea id="approvalComment" placeholder="승인/반려 사유를 입력하세요" rows="3"></textarea>
+      </div>
+      <p id="approvalError" class="modal-error"></p>
+      <div class="modal-buttons">
+        <button id="approveLeaveBtn" class="btn btn-success">승인</button>
+        <button id="rejectLeaveBtn" class="btn btn-danger">반려</button>
+        <button id="cancelApprovalBtn" class="btn btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 급여 상세 관리 모달 -->
+  <div id="payrollDetailModal" class="modal hidden">
+    <div class="modal-content large">
+      <h3>💰 급여 상세 관리</h3>
+      
+      <div class="payroll-header">
+        <div class="employee-info">
+          <h4 id="payrollEmployeeName">직원명</h4>
+          <p><strong>대상월:</strong> <span id="payrollTargetMonth"></span></p>
+          <p><strong>시급:</strong> <span id="employeeHourlyRate">10,000원</span></p>
+        </div>
+        <div class="time-summary">
+          <div class="time-item">
+            <span class="time-label">정규시간</span>
+            <span id="regularHours" class="time-value">0시간</span>
+          </div>
+          <div class="time-item">
+            <span class="time-label">연장시간</span>
+            <span id="overtimeHours" class="time-value">0시간</span>
+          </div>
+          <div class="time-item">
+            <span class="time-label">야간시간</span>
+            <span id="nightHours" class="time-value">0시간</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="payroll-tabs">
+        <button class="payroll-tab-btn active" data-tab="allowances">수당</button>
+        <button class="payroll-tab-btn" data-tab="deductions">공제</button>
+        <button class="payroll-tab-btn" data-tab="summary">명세서</button>
+      </div>
+
+      <!-- 수당 탭 -->
+      <div id="allowancesTab" class="payroll-tab-content active">
+        <div class="allowances-section">
+          <div class="section-header">
+            <h4>💵 추가 수당</h4>
+            <button id="addAllowanceBtn" class="btn btn-small btn-success">수당 추가</button>
+          </div>
+          
+          <div class="allowances-grid">
+            <div class="allowance-item">
+              <label>보너스</label>
+              <input type="number" id="bonusAmount" value="0" min="0" step="1000">
+              <span class="currency">원</span>
+            </div>
+            <div class="allowance-item">
+              <label>인센티브</label>
+              <input type="number" id="incentiveAmount" value="0" min="0" step="1000">
+              <span class="currency">원</span>
+            </div>
+            <div class="allowance-item">
+              <label>교통비</label>
+              <input type="number" id="transportationAllowance" value="0" min="0" step="1000">
+              <span class="currency">원</span>
+            </div>
+            <div class="allowance-item">
+              <label>식대</label>
+              <input type="number" id="mealAllowance" value="0" min="0" step="1000">
+              <span class="currency">원</span>
+            </div>
+            <div class="allowance-item">
+              <label>통신비</label>
+              <input type="number" id="communicationAllowance" value="0" min="0" step="1000">
+              <span class="currency">원</span>
+            </div>
+            <div class="allowance-item">
+              <label>자격수당</label>
+              <input type="number" id="qualificationAllowance" value="0" min="0" step="1000">
+              <span class="currency">원</span>
+            </div>
+          </div>
+
+          <!-- 커스텀 수당 목록 -->
+          <div id="customAllowancesList" class="custom-allowances">
+            <!-- 동적으로 추가될 커스텀 수당들 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 공제 탭 -->
+      <div id="deductionsTab" class="payroll-tab-content">
+        <div class="deductions-section">
+          <div class="section-header">
+            <h4>➖ 공제 항목</h4>
+            <button id="addDeductionBtn" class="btn btn-small btn-warning">공제 추가</button>
+          </div>
+          
+          <div class="deductions-grid">
+            <div class="deduction-item">
+              <label>소득세</label>
+              <input type="number" id="incomeTax" value="0" min="0" step="100" readonly>
+              <span class="currency">원 (자동계산)</span>
+            </div>
+            <div class="deduction-item">
+              <label>국민연금</label>
+              <input type="number" id="nationalPension" value="0" min="0" step="100" readonly>
+              <span class="currency">원 (자동계산)</span>
+            </div>
+            <div class="deduction-item">
+              <label>건강보험</label>
+              <input type="number" id="healthInsurance" value="0" min="0" step="100" readonly>
+              <span class="currency">원 (자동계산)</span>
+            </div>
+            <div class="deduction-item">
+              <label>고용보험</label>
+              <input type="number" id="employmentInsurance" value="0" min="0" step="100" readonly>
+              <span class="currency">원 (자동계산)</span>
+            </div>
+            <div class="deduction-item">
+              <label>지각/결근 공제</label>
+              <input type="number" id="attendanceDeduction" value="0" min="0" step="1000">
+              <span class="currency">원</span>
+            </div>
+            <div class="deduction-item">
+              <label>기타 공제</label>
+              <input type="number" id="otherDeduction" value="0" min="0" step="1000">
+              <span class="currency">원</span>
+            </div>
+          </div>
+
+          <!-- 커스텀 공제 목록 -->
+          <div id="customDeductionsList" class="custom-deductions">
+            <!-- 동적으로 추가될 커스텀 공제들 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 급여 명세서 탭 -->
+      <div id="summaryTab" class="payroll-tab-content">
+        <div class="payroll-summary-section">
+          <div class="summary-table">
+            <h4>📋 급여 명세서</h4>
+            <table class="payroll-detail-table">
+              <tbody>
+                <tr>
+                  <td class="label">기본급</td>
+                  <td id="summaryBasePay" class="amount">0원</td>
+                </tr>
+                <tr>
+                  <td class="label">연장수당</td>
+                  <td id="summaryOvertimePay" class="amount">0원</td>
+                </tr>
+                <tr>
+                  <td class="label">야간수당</td>
+                  <td id="summaryNightPay" class="amount">0원</td>
+                </tr>
+                <tr>
+                  <td class="label">기타수당</td>
+                  <td id="summaryAllowances" class="amount">0원</td>
+                </tr>
+                <tr class="subtotal">
+                  <td class="label"><strong>지급총액</strong></td>
+                  <td id="summaryGrossPay" class="amount"><strong>0원</strong></td>
+                </tr>
+                <tr>
+                  <td class="label">소득세</td>
+                  <td id="summaryIncomeTax" class="amount deduction">-0원</td>
+                </tr>
+                <tr>
+                  <td class="label">국민연금</td>
+                  <td id="summaryNationalPension" class="amount deduction">-0원</td>
+                </tr>
+                <tr>
+                  <td class="label">건강보험</td>
+                  <td id="summaryHealthInsurance" class="amount deduction">-0원</td>
+                </tr>
+                <tr>
+                  <td class="label">고용보험</td>
+                  <td id="summaryEmploymentInsurance" class="amount deduction">-0원</td>
+                </tr>
+                <tr>
+                  <td class="label">기타공제</td>
+                  <td id="summaryOtherDeductions" class="amount deduction">-0원</td>
+                </tr>
+                <tr class="subtotal">
+                  <td class="label"><strong>공제총액</strong></td>
+                  <td id="summaryTotalDeductions" class="amount deduction"><strong>-0원</strong></td>
+                </tr>
+                <tr class="total">
+                  <td class="label"><strong>실수령액</strong></td>
+                  <td id="summaryNetPay" class="amount"><strong>0원</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <p id="payrollDetailError" class="modal-error"></p>
+      <div class="modal-buttons">
+        <button id="savePayrollBtn" class="btn btn-success">급여 저장</button>
+        <button id="printPayslipBtn" class="btn btn-secondary">명세서 출력</button>
+        <button id="cancelPayrollBtn" class="btn btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 커스텀 수당/공제 추가 모달 -->
+  <div id="addCustomItemModal" class="modal hidden">
+    <div class="modal-content">
+      <h3 id="customItemTitle">수당 추가</h3>
+      <div class="form-group">
+        <label>항목명</label>
+        <input type="text" id="customItemName" placeholder="예: 성과급, 대출상환 등">
+      </div>
+      <div class="form-group">
+        <label>금액</label>
+        <input type="number" id="customItemAmount" min="0" step="1000">
+        <span class="currency">원</span>
+      </div>
+      <div class="form-group">
+        <label>설명</label>
+        <textarea id="customItemDescription" placeholder="항목에 대한 설명을 입력하세요" rows="2"></textarea>
+      </div>
+      <p id="customItemError" class="modal-error"></p>
+      <div class="modal-buttons">
+        <button id="saveCustomItemBtn" class="btn btn-primary">추가</button>
+        <button id="cancelCustomItemBtn" class="btn btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
