@@ -1,0 +1,70 @@
+{
+  "api": {
+    "version": "1.0.0",
+    "name": "통합 출퇴근 관리 API",
+    "description": "모든 플랫폼이 사용하는 통일된 출퇴근 관리 API"
+  },
+  "database": {
+    "name": "commuteApp",
+    "collections": {
+      "records": "출퇴근 기록",
+      "faces": "직원 정보 및 얼굴 인식 데이터",
+      "settings": "관리자 설정",
+      "payroll": "급여 계산 결과",
+      "leave": "휴가/결근 정보",
+      "schedules": "근무 스케줄",
+      "backups": "백업 메타데이터",
+      "compliance": "컴플라이언스 체크 결과"
+    }
+  },
+  "features": {
+    "core": [
+      "인증 및 보안",
+      "출퇴근 기록 관리",
+      "직원 관리",
+      "얼굴 인식 데이터 관리"
+    ],
+    "advanced": [
+      "급여 계산 엔진",
+      "근로기준법 컴플라이언스 체크",
+      "자동 백업 시스템",
+      "스케줄 관리",
+      "보고서 생성",
+      "Excel 내보내기"
+    ],
+    "security": [
+      "bcrypt 암호화",
+      "세션 관리",
+      "실패 횟수 제한",
+      "계정 잠금",
+      "입력 데이터 검증",
+      "개인정보 동의 관리"
+    ]
+  },
+  "platforms": {
+    "desktop_admin": {
+      "app": "CommuteAdmin",
+      "platform": "Electron Windows",
+      "features": "all",
+      "ui_complexity": "high"
+    },
+    "mobile_admin": {
+      "app": "admin-web-app",
+      "platform": "Capacitor (Android/iOS/Web)",
+      "features": "essential + mobile_optimized",
+      "ui_complexity": "medium"
+    },
+    "web_admin": {
+      "app": "admin-app",
+      "platform": "Web Browser",
+      "features": "essential + web_optimized",
+      "ui_complexity": "medium"
+    },
+    "employee_desktop": {
+      "app": "Commute",
+      "platform": "Electron Windows",
+      "features": "employee_only",
+      "ui_complexity": "simple"
+    }
+  }
+}

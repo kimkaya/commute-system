@@ -1,0 +1,441 @@
+{
+  "database": {
+    "name": "commuteApp",
+    "version": "2.0",
+    "description": "통합 출퇴근 관리 시스템 데이터베이스",
+    "lastUpdated": "2025-01-25"
+  },
+  "collections": {
+    "records": {
+      "description": "출퇴근 기록",
+      "indexes": [
+        { "fields": { "date": 1, "userName": 1 }, "unique": true },
+        { "fields": { "date": -1 } },
+        { "fields": { "userName": 1 } },
+        { "fields": { "createdAt": -1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "date": "String (YYYY-MM-DD 형식)",
+        "userName": "String (직원명)",
+        "checkIn": "String (HH:MM 형식, null 가능)",
+        "checkOut": "String (HH:MM 형식, null 가능)",
+        "totalBreakMinutes": "Number (기본값: 0)",
+        "breakStart": "String (HH:MM 형식, null 가능)",
+        "breakEnd": "String (HH:MM 형식, null 가능)",
+        "workLocation": "String (근무 장소, null 가능)",
+        "notes": "String (메모, null 가능)",
+        "deviceId": "String (기록한 기기 ID, null 가능)",
+        "ipAddress": "String (기록 시 IP, null 가능)",
+        "createdAt": "Date",
+        "updatedAt": "Date",
+        "status": "String (active, deleted, modified 중 하나)",
+        "originalCheckIn": "String (수정 전 출근시간, null 가능)",
+        "originalCheckOut": "String (수정 전 퇴근시간, null 가능)",
+        "modifiedBy": "String (수정한 관리자, null 가능)",
+        "modifiedAt": "Date (수정일시, null 가능)"
+      }
+    },
+    "faces": {
+      "description": "직원 정보 및 얼굴 인식 데이터",
+      "indexes": [
+        { "fields": { "name": 1 }, "unique": true },
+        { "fields": { "employeeId": 1 }, "unique": true, "sparse": true },
+        { "fields": { "department": 1 } },
+        { "fields": { "position": 1 } },
+        { "fields": { "isActive": 1 } },
+        { "fields": { "registeredAt": -1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "name": "String (직원명)",
+        "employeeId": "String (사번, null 가능)",
+        "email": "String (이메일, null 가능)",
+        "phone": "String (전화번호, null 가능)",
+        "department": "String (부서, null 가능)",
+        "position": "String (직급, null 가능)",
+        "hireDate": "String (입사일 YYYY-MM-DD, null 가능)",
+        "birthDate": "String (생년월일 YYYY-MM-DD, null 가능)",
+        "descriptors": "Array (얼굴 인식 특성값 배열)",
+        "registeredAt": "Date (등록일시)",
+        "passwordHash": "String (SHA256 해시, null 가능)",
+        "hourlyRate": "Number (시급, 기본값: 10000)",
+        "monthlySalary": "Number (월급, null 가능)",
+        "salaryType": "String (hourly, monthly, null 가능)",
+        "registeredDevices": "Array (등록된 기기 ID 목록)",
+        "schedule": {
+          "type": "Array",
+          "items": {
+            "dayOfWeek": "Number (0=일요일, 1=월요일, ...)",
+            "startTime": "String (HH:MM)",
+            "endTime": "String (HH:MM)",
+            "isWorkDay": "Boolean",
+            "breakDuration": "Number (휴게시간 분)"
+          }
+        },
+        "contract": {
+          "contractType": "String (정규직, 계약직, 파트타임 등)",
+          "contractPath": "String (계약서 파일 경로, null 가능)",
+          "startDate": "String (계약 시작일 YYYY-MM-DD)",
+          "endDate": "String (계약 종료일 YYYY-MM-DD, null 가능)",
+          "workHoursPerWeek": "Number (주당 근무시간)"
+        },
+        "privacyConsent": {
+          "agreedAt": "Date",
+          "privacyPolicy": "Boolean",
+          "biometricData": "Boolean",
+          "dataRetention": "Boolean",
+          "retentionPeriod": "String (until_resignation, 1year, 3years 등)"
+        },
+        "permissions": "Array (권한 목록)",
+        "isActive": "Boolean (기본값: true)",
+        "inactiveReason": "String (비활성화 사유, null 가능)",
+        "inactiveDate": "Date (비활성화일, null 가능)",
+        "createdAt": "Date",
+        "updatedAt": "Date",
+        "lastLoginAt": "Date (마지막 로그인, null 가능)",
+        "loginCount": "Number (로그인 횟수, 기본값: 0)"
+      }
+    },
+    "settings": {
+      "description": "시스템 설정",
+      "indexes": [
+        { "fields": { "_id": 1 } }
+      ],
+      "schema": {
+        "_id": "String (고정값들: adminSettings, workSettings, systemSettings 등)",
+        "passwordHash": "String (관리자 비밀번호 bcrypt 해시)",
+        "failCount": "Number (로그인 실패 횟수, 기본값: 0)",
+        "lockedUntil": "Date (계정 잠금 해제 시간, null 가능)",
+        "sessionTimeout": "Number (세션 만료 시간, 분 단위)",
+        "defaultHourlyRate": "Number (기본 시급)",
+        "overtimeRate": "Number (연장근무 배율, 기본값: 1.5)",
+        "nightWorkRate": "Number (야간근무 배율, 기본값: 1.5)",
+        "holidayWorkRate": "Number (휴일근무 배율, 기본값: 2.0)",
+        "weeklyRegularHours": "Number (주당 정규시간, 기본값: 40)",
+        "standardStartTime": "String (표준 출근시간 HH:MM)",
+        "standardEndTime": "String (표준 퇴근시간 HH:MM)",
+        "nightWorkStartTime": "String (야간근무 시작시간 HH:MM, 기본값: 22:00)",
+        "lunchBreakDuration": "Number (점심시간 분, 기본값: 60)",
+        "allowedIpRanges": "Array (허용된 IP 대역)",
+        "backupSettings": {
+          "frequency": "String (daily, weekly, monthly)",
+          "time": "String (HH:MM)",
+          "retentionDays": "Number (백업 보관일수)",
+          "autoBackup": "Boolean"
+        },
+        "notification": {
+          "email": {
+            "enabled": "Boolean",
+            "smtp": {
+              "host": "String",
+              "port": "Number",
+              "secure": "Boolean",
+              "username": "String",
+              "password": "String"
+            }
+          },
+          "slack": {
+            "enabled": "Boolean",
+            "webhookUrl": "String"
+          }
+        },
+        "compliance": {
+          "maxWeeklyHours": "Number (주간 최대 근무시간, 기본값: 52)",
+          "maxContinuousWorkDays": "Number (연속 근무일 한도, 기본값: 6)",
+          "mandatoryBreakAfterHours": "Number (의무휴게 시작 근무시간)"
+        },
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      }
+    },
+    "payroll": {
+      "description": "급여 계산 결과",
+      "indexes": [
+        { "fields": { "employee": 1, "month": 1 }, "unique": true },
+        { "fields": { "month": 1 } },
+        { "fields": { "employee": 1 } },
+        { "fields": { "calculatedAt": -1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "employee": "String (직원명)",
+        "employeeId": "String (사번, null 가능)",
+        "month": "String (YYYY-MM 형식)",
+        "payPeriod": {
+          "startDate": "String (YYYY-MM-DD)",
+          "endDate": "String (YYYY-MM-DD)"
+        },
+        "workHours": {
+          "regular": "Number (정규시간)",
+          "overtime": "Number (연장시간)",
+          "night": "Number (야간시간)",
+          "holiday": "Number (휴일시간)",
+          "total": "Number (총 근무시간)"
+        },
+        "hourlyRate": "Number (시급)",
+        "basePay": "Number (기본급)",
+        "overtimePay": "Number (연장수당)",
+        "nightPay": "Number (야간수당)",
+        "holidayPay": "Number (휴일수당)",
+        "allowances": {
+          "bonus": "Number (성과급)",
+          "incentive": "Number (인센티브)",
+          "transportation": "Number (교통비)",
+          "meal": "Number (식대)",
+          "communication": "Number (통신비)",
+          "qualification": "Number (자격수당)",
+          "other": "Number (기타수당)",
+          "total": "Number (총 수당)"
+        },
+        "grossPay": "Number (총 지급액)",
+        "deductions": {
+          "incomeTax": "Number (소득세)",
+          "nationalPension": "Number (국민연금)",
+          "healthInsurance": "Number (건강보험)",
+          "employmentInsurance": "Number (고용보험)",
+          "localTax": "Number (지방세)",
+          "attendance": "Number (결근공제)",
+          "other": "Number (기타공제)",
+          "total": "Number (총 공제액)"
+        },
+        "netPay": "Number (실수령액)",
+        "status": "String (draft, confirmed, paid 중 하나)",
+        "calculatedBy": "String (계산자)",
+        "calculatedAt": "Date (계산일시)",
+        "confirmedBy": "String (확인자, null 가능)",
+        "confirmedAt": "Date (확인일시, null 가능)",
+        "paidAt": "Date (지급일시, null 가능)",
+        "notes": "String (메모, null 가능)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      }
+    },
+    "leave": {
+      "description": "휴가 및 결근 정보",
+      "indexes": [
+        { "fields": { "employee": 1, "date": 1 } },
+        { "fields": { "employee": 1 } },
+        { "fields": { "type": 1 } },
+        { "fields": { "status": 1 } },
+        { "fields": { "requestedAt": -1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "employee": "String (직원명)",
+        "employeeId": "String (사번, null 가능)",
+        "type": "String (annual, sick, personal, maternity, paternity, bereavement, unpaid 등)",
+        "startDate": "String (시작일 YYYY-MM-DD)",
+        "endDate": "String (종료일 YYYY-MM-DD)",
+        "startTime": "String (시작시간 HH:MM, 반차인 경우)",
+        "endTime": "String (종료시간 HH:MM, 반차인 경우)",
+        "duration": "Number (일수 또는 시간)",
+        "unit": "String (days, hours)",
+        "reason": "String (사유)",
+        "status": "String (pending, approved, rejected, cancelled)",
+        "requestedAt": "Date (신청일시)",
+        "requestedBy": "String (신청자)",
+        "reviewedBy": "String (검토자, null 가능)",
+        "reviewedAt": "Date (검토일시, null 가능)",
+        "reviewNotes": "String (검토 메모, null 가능)",
+        "attachments": "Array (첨부파일 경로)",
+        "isPaid": "Boolean (유급 여부)",
+        "deductFromSalary": "Boolean (급여 차감 여부)",
+        "remainingBalance": "Number (잔여 휴가일수, null 가능)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      }
+    },
+    "schedules": {
+      "description": "근무 스케줄 관리",
+      "indexes": [
+        { "fields": { "employee": 1, "date": 1 }, "unique": true },
+        { "fields": { "employee": 1 } },
+        { "fields": { "date": 1 } },
+        { "fields": { "shift": 1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "employee": "String (직원명)",
+        "employeeId": "String (사번, null 가능)",
+        "date": "String (날짜 YYYY-MM-DD)",
+        "shift": "String (근무 시프트: morning, afternoon, night, off)",
+        "startTime": "String (시작시간 HH:MM)",
+        "endTime": "String (종료시간 HH:MM)",
+        "breakDuration": "Number (휴게시간 분)",
+        "location": "String (근무 장소)",
+        "notes": "String (메모, null 가능)",
+        "isHoliday": "Boolean (공휴일 여부)",
+        "holidayType": "String (공휴일 종류, null 가능)",
+        "assignedBy": "String (배정자)",
+        "assignedAt": "Date (배정일시)",
+        "status": "String (scheduled, confirmed, cancelled)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      }
+    },
+    "compliance": {
+      "description": "근로기준법 컴플라이언스 체크 결과",
+      "indexes": [
+        { "fields": { "employee": 1, "weekStart": 1 }, "unique": true },
+        { "fields": { "weekStart": 1 } },
+        { "fields": { "status": 1 } },
+        { "fields": { "checkedAt": -1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "employee": "String (직원명)",
+        "employeeId": "String (사번, null 가능)",
+        "weekStart": "String (주 시작일 YYYY-MM-DD)",
+        "weekEnd": "String (주 종료일 YYYY-MM-DD)",
+        "weeklyHours": "Number (주간 총 근무시간)",
+        "weeklyOvertime": "Number (주간 연장시간)",
+        "continuousWorkDays": "Number (연속 근무일수)",
+        "nightWorkDays": "Number (야간 근무일수)",
+        "status": "String (good, warning, violation)",
+        "violations": "Array (위반 사항 목록)",
+        "warnings": "Array (경고 사항 목록)",
+        "recommendations": "Array (개선 권장사항)",
+        "checkedBy": "String (체크한 사람)",
+        "checkedAt": "Date (체크일시)",
+        "reviewRequired": "Boolean (검토 필요 여부)",
+        "reviewedBy": "String (검토자, null 가능)",
+        "reviewedAt": "Date (검토일시, null 가능)",
+        "actionTaken": "String (조치 내용, null 가능)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      }
+    },
+    "backups": {
+      "description": "백업 메타데이터",
+      "indexes": [
+        { "fields": { "createdAt": -1 } },
+        { "fields": { "type": 1 } },
+        { "fields": { "status": 1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "fileName": "String (백업 파일명)",
+        "filePath": "String (백업 파일 경로)",
+        "fileSize": "Number (파일 크기 바이트)",
+        "type": "String (auto, manual)",
+        "status": "String (creating, completed, failed)",
+        "description": "String (백업 설명, null 가능)",
+        "dataTypes": "Array (백업된 데이터 타입 목록)",
+        "recordCount": {
+          "records": "Number",
+          "faces": "Number",
+          "payroll": "Number",
+          "leave": "Number",
+          "schedules": "Number",
+          "total": "Number"
+        },
+        "compression": "String (압축 방식)",
+        "encryption": "Boolean (암호화 여부)",
+        "checksum": "String (체크섬)",
+        "createdBy": "String (생성자)",
+        "createdAt": "Date (생성일시)",
+        "completedAt": "Date (완료일시, null 가능)",
+        "restoredAt": "Date (복원일시, null 가능)",
+        "restoredBy": "String (복원자, null 가능)",
+        "expiresAt": "Date (만료일시, null 가능)",
+        "notes": "String (메모, null 가능)"
+      }
+    },
+    "audit_logs": {
+      "description": "시스템 감사 로그",
+      "indexes": [
+        { "fields": { "timestamp": -1 } },
+        { "fields": { "user": 1 } },
+        { "fields": { "action": 1 } },
+        { "fields": { "resource": 1 } },
+        { "fields": { "level": 1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "timestamp": "Date",
+        "user": "String (사용자명 또는 system)",
+        "userId": "String (사용자 ID, null 가능)",
+        "action": "String (create, update, delete, login, logout 등)",
+        "resource": "String (대상 리소스: record, employee, payroll 등)",
+        "resourceId": "String (리소스 ID)",
+        "details": "Object (상세 정보)",
+        "beforeValue": "Object (변경 전 값, null 가능)",
+        "afterValue": "Object (변경 후 값, null 가능)",
+        "ipAddress": "String (IP 주소)",
+        "userAgent": "String (사용자 에이전트)",
+        "deviceId": "String (기기 ID, null 가능)",
+        "level": "String (info, warning, error)",
+        "success": "Boolean (작업 성공 여부)",
+        "errorMessage": "String (오류 메시지, null 가능)",
+        "duration": "Number (처리 시간 밀리초, null 가능)"
+      }
+    },
+    "notifications": {
+      "description": "알림 관리",
+      "indexes": [
+        { "fields": { "recipient": 1, "createdAt": -1 } },
+        { "fields": { "type": 1 } },
+        { "fields": { "status": 1 } },
+        { "fields": { "createdAt": -1 } }
+      ],
+      "schema": {
+        "_id": "ObjectId",
+        "recipient": "String (수신자명)",
+        "recipientId": "String (수신자 ID, null 가능)",
+        "type": "String (overtime_warning, compliance_violation, backup_completed 등)",
+        "title": "String (알림 제목)",
+        "message": "String (알림 내용)",
+        "data": "Object (추가 데이터, null 가능)",
+        "priority": "String (low, normal, high, urgent)",
+        "status": "String (pending, sent, delivered, read, failed)",
+        "channel": "String (email, sms, push, system)",
+        "sentAt": "Date (발송일시, null 가능)",
+        "readAt": "Date (읽은일시, null 가능)",
+        "expiresAt": "Date (만료일시, null 가능)",
+        "retryCount": "Number (재시도 횟수, 기본값: 0)",
+        "errorMessage": "String (오류 메시지, null 가능)",
+        "createdAt": "Date",
+        "updatedAt": "Date"
+      }
+    }
+  },
+  "migration": {
+    "version": "2.0",
+    "from": "1.0",
+    "description": "기존 데이터를 새 스키마로 마이그레이션",
+    "scripts": [
+      {
+        "collection": "faces",
+        "description": "직원 정보에 새 필드 추가",
+        "operations": [
+          "employeeId, email, phone, department, position 필드 추가",
+          "schedule 구조 개선",
+          "contract 정보 구조화",
+          "isActive 상태 필드 추가",
+          "권한 관리 추가"
+        ]
+      },
+      {
+        "collection": "records",
+        "description": "출퇴근 기록 개선",
+        "operations": [
+          "deviceId, ipAddress 추가로 기록 추적성 향상",
+          "수정 이력 관리 필드 추가",
+          "근무 장소 필드 추가",
+          "상태 관리 필드 추가"
+        ]
+      },
+      {
+        "collection": "settings",
+        "description": "설정 구조 개선",
+        "operations": [
+          "백업 설정 구조화",
+          "알림 설정 추가",
+          "컴플라이언스 설정 추가",
+          "보안 설정 강화"
+        ]
+      }
+    ]
+  }
+}
