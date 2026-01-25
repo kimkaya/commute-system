@@ -51,3 +51,6 @@ backups/
 
 # Railway
 .railway/
+
+# Large files
+*.zip
