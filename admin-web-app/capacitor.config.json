@@ -1,0 +1,13 @@
+{
+  "appId": "com.commute.admin",
+  "appName": "출퇴근 관리자",
+  "webDir": "public",
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "ios": {
+    "scheme": "App"
+  }
+}
