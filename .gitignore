@@ -12,6 +12,13 @@ dist/
 build/
 .cache/
 
+# Commute ERP tools/temp
+commute-erp/tools/
+commute-erp/supabase/.temp/
+
+# Local supabase folder
+supabase/
+
 # IDE
 .idea/
 .vscode/
