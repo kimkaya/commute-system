@@ -147,12 +147,12 @@ export default function CheckInPage() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600 dark:text-gray-400">Check In:</span>
-                  <span className="font-medium">{formatDateTime(todayRecord.check_in_time)}</span>
+                  <span className="font-medium">{formatDateTime(todayRecord.check_in)}</span>
                 </div>
-                {todayRecord.check_out_time && (
+                {todayRecord.check_out && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 dark:text-gray-400">Check Out:</span>
-                    <span className="font-medium">{formatDateTime(todayRecord.check_out_time)}</span>
+                    <span className="font-medium">{formatDateTime(todayRecord.check_out)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center">
@@ -192,7 +192,7 @@ export default function CheckInPage() {
                     Manual Check In
                   </Button>
                 </>
-              ) : !todayRecord.check_out_time ? (
+              ) : !todayRecord.check_out ? (
                 <>
                   <Button
                     onClick={handleCheckOutClick}

@@ -105,7 +105,7 @@ export default function EmployeesPage() {
                       key={emp.id}
                       className="border-b border-gray-100 dark:border-gray-800"
                     >
-                      <td className="py-3 px-4 text-sm">{emp.full_name}</td>
+                      <td className="py-3 px-4 text-sm">{emp.name}</td>
                       <td className="py-3 px-4 text-sm">{emp.email}</td>
                       <td className="py-3 px-4 text-sm">{emp.department || '-'}</td>
                       <td className="py-3 px-4 text-sm">{emp.position || '-'}</td>

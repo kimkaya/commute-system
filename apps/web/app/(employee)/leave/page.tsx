@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { formatDate, getStatusColor } from '@/lib/utils';
-import { LeaveApplication } from '@/types';
+import { LeaveRequest } from '@/types';
 
 export default function LeavePage() {
   const { user } = useAuth();
-  const [leaves, setLeaves] = useState<LeaveApplication[]>([]);
+  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({

@@ -64,7 +64,7 @@ export default function RegisterPage() {
             await supabase.from('users').insert({
               id: user.id,
               email: formData.email,
-              full_name: formData.fullName,
+              name: formData.fullName,
               department: formData.department,
               position: formData.position,
               role: 'employee',

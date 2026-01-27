@@ -14,8 +14,8 @@ export default function MyRecordsPage() {
   const presentDays = records.filter((r) => r.status === 'present').length;
   const lateDays = records.filter((r) => r.status === 'late').length;
   const totalHours = records
-    .filter((r) => r.check_out_time)
-    .reduce((sum, r) => sum + calculateWorkHours(r.check_in_time, r.check_out_time!), 0);
+    .filter((r) => r.check_out)
+    .reduce((sum, r) => sum + calculateWorkHours(r.check_in, r.check_out!), 0);
 
   if (!user) {
     return (

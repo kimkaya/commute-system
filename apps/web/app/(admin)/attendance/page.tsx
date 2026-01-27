@@ -30,9 +30,9 @@ export default function AttendancePage() {
       const { data, error } = await supabase
         .from('attendance')
         .select('*, users(full_name, email)')
-        .gte('check_in_time', startDate.toISOString())
-        .lte('check_in_time', endDate.toISOString())
-        .order('check_in_time', { ascending: false });
+        .gte('check_in', startDate.toISOString())
+        .lte('check_in', endDate.toISOString())
+        .order('check_in', { ascending: false });
 
       if (error) throw error;
       setRecords(data || []);
@@ -130,9 +130,9 @@ export default function AttendancePage() {
                           <p className="text-xs text-gray-500">{record.users?.email}</p>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-sm">{formatTime(record.check_in_time)}</td>
+                      <td className="py-3 px-4 text-sm">{formatTime(record.check_in)}</td>
                       <td className="py-3 px-4 text-sm">
-                        {record.check_out_time ? formatTime(record.check_out_time) : '-'}
+                        {record.check_out ? formatTime(record.check_out) : '-'}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(record.status)}`}>

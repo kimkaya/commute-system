@@ -48,7 +48,7 @@ export function useAttendance(userId?: string) {
         .from('attendance')
         .insert({
           user_id: userId,
-          check_in_time: now,
+          check_in: now,
           location,
           status: 'present',
         })
@@ -104,8 +104,8 @@ export function useAttendance(userId?: string) {
         .from('attendance')
         .select('*')
         .eq('user_id', userId)
-        .gte('check_in_time', today.toISOString())
-        .lt('check_in_time', tomorrow.toISOString())
+        .gte('check_in', today.toISOString())
+        .lt('check_in', tomorrow.toISOString())
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;

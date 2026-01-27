@@ -6,19 +6,21 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Settings } from '@/types';
+import { SystemSettings as Settings } from '@/types';
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const [settings, setSettings] = useState<Settings>({
     id: '',
-    work_start_time: '09:00',
-    work_end_time: '17:00',
+    work_hours_start: '09:00',
+    work_hours_end: '17:00',
     late_threshold_minutes: 15,
-    half_day_hours: 4,
-    full_day_hours: 8,
-    enable_face_recognition: true,
-    enable_location_tracking: true,
+    overtime_rate: 1.5,
+    weekend_days: [0, 6],
+    holidays: [],
+    face_match_threshold: 0.6,
+    location_required: false,
+    updated_at: new Date().toISOString(),
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -133,15 +135,15 @@ export default function SettingsPage() {
               <Input
                 label="Work Start Time"
                 type="time"
-                name="work_start_time"
-                value={settings.work_start_time}
+                name="work_hours_start"
+                value={settings.work_hours_start}
                 onChange={handleInputChange}
               />
               <Input
                 label="Work End Time"
                 type="time"
-                name="work_end_time"
-                value={settings.work_end_time}
+                name="work_hours_end"
+                value={settings.work_hours_end}
                 onChange={handleInputChange}
               />
             </div>
@@ -163,17 +165,21 @@ export default function SettingsPage() {
                 onChange={handleInputChange}
               />
               <Input
-                label="Half Day Hours"
+                label="Overtime Rate (multiplier)"
                 type="number"
-                name="half_day_hours"
-                value={settings.half_day_hours}
+                step="0.1"
+                name="overtime_rate"
+                value={settings.overtime_rate}
                 onChange={handleInputChange}
               />
               <Input
-                label="Full Day Hours"
+                label="Face Match Threshold (0-1, lower is stricter)"
                 type="number"
-                name="full_day_hours"
-                value={settings.full_day_hours}
+                step="0.1"
+                min="0"
+                max="1"
+                name="face_match_threshold"
+                value={settings.face_match_threshold}
                 onChange={handleInputChange}
               />
             </div>
@@ -190,8 +196,8 @@ export default function SettingsPage() {
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  name="enable_face_recognition"
-                  checked={settings.enable_face_recognition}
+                  name="location_required"
+                  checked={settings.location_required}
                   onChange={handleInputChange}
                   className="w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
@@ -205,8 +211,8 @@ export default function SettingsPage() {
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  name="enable_location_tracking"
-                  checked={settings.enable_location_tracking}
+                  name="location_required"
+                  checked={settings.location_required}
                   onChange={handleInputChange}
                   className="w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />

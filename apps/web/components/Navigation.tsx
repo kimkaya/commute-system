@@ -105,7 +105,7 @@ export function Navigation() {
             {user ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-700 dark:text-gray-300">
-                  {user.full_name}
+                  {user.name}
                 </span>
                 <Button onClick={logout} variant="outline" size="sm">
                   Logout
