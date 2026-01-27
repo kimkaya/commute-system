@@ -1,0 +1,16 @@
+{
+  "name": "@commute-system/shared",
+  "version": "1.0.0",
+  "description": "Shared types and constants for Commute System",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {},
+  "keywords": [
+    "commute",
+    "shared",
+    "types",
+    "constants"
+  ],
+  "author": "Commute System Team",
+  "license": "MIT"
+}
