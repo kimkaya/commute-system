@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable static export for GitHub Pages and Electron deployment
+  // Note: This disables features like API routes and server-side rendering
+  // All pages must be pre-rendered at build time
   output: 'export',
   reactStrictMode: true,
   images: {

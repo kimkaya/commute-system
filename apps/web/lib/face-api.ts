@@ -1,4 +1,5 @@
 import * as faceapi from 'face-api.js';
+import { FACE_RECOGNITION } from '../../../packages/shared/constants';
 
 let modelsLoaded = false;
 
@@ -6,7 +7,7 @@ export async function loadFaceApiModels() {
   if (modelsLoaded) return;
   
   try {
-    const MODEL_URL = '/models';
+    const MODEL_URL = FACE_RECOGNITION.MODEL_PATH;
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
       faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -45,7 +46,7 @@ export async function compareFaces(
   return faceapi.euclideanDistance(d1, d2);
 }
 
-export function isFaceMatch(distance: number, threshold = 0.6): boolean {
+export function isFaceMatch(distance: number, threshold = FACE_RECOGNITION.MATCH_THRESHOLD): boolean {
   return distance < threshold;
 }
 
