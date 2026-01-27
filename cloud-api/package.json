@@ -1,0 +1,33 @@
+{
+  "name": "commute-cloud-api",
+  "version": "1.0.0",
+  "description": "Supabase 기반 출퇴근 관리 시스템 백엔드",
+  "main": "src/lib/supabase.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "supabase start",
+    "stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:migrate": "supabase migration up",
+    "functions:serve": "supabase functions serve",
+    "functions:deploy": "supabase functions deploy",
+    "generate:types": "supabase gen types typescript --local > src/lib/database.types.ts"
+  },
+  "keywords": [
+    "supabase",
+    "attendance",
+    "commute",
+    "postgres",
+    "edge-functions"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "supabase": "^1.142.0",
+    "typescript": "^5.3.0"
+  }
+}
