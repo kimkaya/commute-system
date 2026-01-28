@@ -1,68 +1,147 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+/* Pretendard 폰트 */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+  color: white;
+  user-select: none;
+  cursor: default;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* 키오스크 전용 스타일 */
+@layer components {
+  .kiosk-btn {
+    @apply px-8 py-6 text-2xl font-bold rounded-2xl transition-all duration-200 active:scale-95;
+  }
+
+  .kiosk-btn-primary {
+    @apply bg-white text-primary-700 hover:bg-primary-50 active:bg-primary-100;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  }
+
+  .kiosk-btn-success {
+    @apply bg-success-500 text-white hover:bg-success-600;
+    box-shadow: 0 10px 40px rgba(34, 197, 94, 0.3);
+  }
+
+  .kiosk-btn-danger {
+    @apply bg-danger-500 text-white hover:bg-danger-600;
+    box-shadow: 0 10px 40px rgba(239, 68, 68, 0.3);
+  }
+
+  .kiosk-btn-secondary {
+    @apply bg-white/20 text-white hover:bg-white/30 backdrop-blur;
+  }
+
+  .kiosk-card {
+    @apply bg-white/10 backdrop-blur-lg rounded-3xl p-8;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  }
+
+  .kiosk-input {
+    @apply w-full px-6 py-4 text-xl bg-white/20 backdrop-blur border-2 border-white/30 rounded-xl 
+           focus:outline-none focus:border-white focus:bg-white/30 text-white placeholder-white/60;
+  }
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+/* 애니메이션 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
   }
-  a:hover {
-    color: #747bff;
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.4s ease-out;
+}
+
+/* 얼굴 인식 오버레이 */
+.face-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 280px;
+  height: 350px;
+  border: 4px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.face-overlay.detecting {
+  border-color: #fbbf24;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.face-overlay.matched {
+  border-color: #22c55e;
+  box-shadow: 0 0 40px rgba(34, 197, 94, 0.5);
+}
+
+.face-overlay.not-matched {
+  border-color: #ef4444;
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.5);
+}
+
+/* 웹캠 미러링 */
+.webcam-mirrored {
+  transform: scaleX(-1);
+}
+
+/* 숫자 패드 */
+.numpad-btn {
+  @apply w-20 h-20 text-3xl font-bold bg-white/20 hover:bg-white/30 active:bg-white/40 
+         rounded-2xl transition-all duration-150 active:scale-95;
 }

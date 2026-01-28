@@ -1,68 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Pretendard 폰트 */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  font-family: 'Pretendard', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
   min-height: 100vh;
+  background-color: #f8fafc;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Primary color utilities */
+@layer utilities {
+  .text-primary-50 { color: #eef2ff; }
+  .text-primary-100 { color: #e0e7ff; }
+  .text-primary-200 { color: #c7d2fe; }
+  .text-primary-300 { color: #a5b4fc; }
+  .text-primary-400 { color: #818cf8; }
+  .text-primary-500 { color: #6366f1; }
+  .text-primary-600 { color: #4f46e5; }
+  .text-primary-700 { color: #4338ca; }
+  .text-primary-800 { color: #3730a3; }
+  .text-primary-900 { color: #312e81; }
+
+  .bg-primary-50 { background-color: #eef2ff; }
+  .bg-primary-100 { background-color: #e0e7ff; }
+  .bg-primary-200 { background-color: #c7d2fe; }
+  .bg-primary-300 { background-color: #a5b4fc; }
+  .bg-primary-400 { background-color: #818cf8; }
+  .bg-primary-500 { background-color: #6366f1; }
+  .bg-primary-600 { background-color: #4f46e5; }
+  .bg-primary-700 { background-color: #4338ca; }
+  .bg-primary-800 { background-color: #3730a3; }
+  .bg-primary-900 { background-color: #312e81; }
+
+  .border-primary-500 { border-color: #6366f1; }
+  .border-primary-600 { border-color: #4f46e5; }
+
+  .ring-primary-500 { --tw-ring-color: #6366f1; }
 }
