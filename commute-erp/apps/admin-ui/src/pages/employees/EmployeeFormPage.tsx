@@ -1,26 +1,22 @@
 // =====================================================
-// 직원 등록/수정 폼 페이지
+// 직원 등록/수정 폼 페이지 (Supabase 연동)
 // =====================================================
 
-import { useState, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Save,
   User,
-  Mail,
-  Phone,
-  Building2,
   Briefcase,
-  Calendar,
   CreditCard,
-  Camera,
-  Upload,
-  X,
   Eye,
   EyeOff,
+  Loader2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getEmployee, createEmployee, updateEmployee, createEmployeeCredentials } from '../../lib/api';
 
 // 부서 목록
 const departments = [
@@ -36,53 +32,18 @@ const departments = [
 // 직급 목록
 const positions = ['사원', '주임', '대리', '과장', '차장', '부장', '이사', '상무', '전무', '대표'];
 
-// 고용 형태
-const employmentTypes = [
-  { id: 'full_time', label: '정규직' },
-  { id: 'contract', label: '계약직' },
-  { id: 'part_time', label: '파트타임' },
-  { id: 'intern', label: '인턴' },
-];
-
-// 은행 목록
-const banks = [
-  '국민은행',
-  '신한은행',
-  '우리은행',
-  '하나은행',
-  '농협은행',
-  'IBK기업은행',
-  'SC제일은행',
-  '케이뱅크',
-  '카카오뱅크',
-  '토스뱅크',
-];
-
 interface EmployeeFormData {
-  // 기본 정보
   name: string;
   email: string;
   phone: string;
-  birthDate: string;
-  gender: 'male' | 'female' | '';
-  address: string;
-  profileImage: string | null;
-
-  // 직무 정보
-  employeeNumber: string;
+  birth_date: string;
+  employee_number: string;
   department: string;
   position: string;
-  employmentType: string;
-  hireDate: string;
-  resignDate: string;
-
-  // 급여 정보
-  baseSalary: number;
-  bankName: string;
-  accountNumber: string;
-  accountHolder: string;
-
-  // 인증 정보
+  hire_date: string;
+  hourly_rate: number;
+  monthly_salary: number;
+  salary_type: 'hourly' | 'monthly';
   password: string;
   passwordConfirm: string;
 }
@@ -91,20 +52,14 @@ const initialFormData: EmployeeFormData = {
   name: '',
   email: '',
   phone: '',
-  birthDate: '',
-  gender: '',
-  address: '',
-  profileImage: null,
-  employeeNumber: '',
+  birth_date: '',
+  employee_number: '',
   department: '',
   position: '',
-  employmentType: 'full_time',
-  hireDate: '',
-  resignDate: '',
-  baseSalary: 0,
-  bankName: '',
-  accountNumber: '',
-  accountHolder: '',
+  hire_date: '',
+  hourly_rate: 10000,
+  monthly_salary: 0,
+  salary_type: 'hourly',
   password: '',
   passwordConfirm: '',
 };
@@ -113,12 +68,113 @@ export function EmployeeFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState<EmployeeFormData>(initialFormData);
   const [showPassword, setShowPassword] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'basic' | 'job' | 'salary' | 'auth'>('basic');
+
+  // 기존 직원 데이터 로드 (수정 모드)
+  const { data: existingEmployee, isLoading: loadingEmployee } = useQuery({
+    queryKey: ['employee', id],
+    queryFn: () => getEmployee(id!),
+    enabled: isEdit,
+  });
+
+  // 기존 데이터로 폼 채우기
+  useEffect(() => {
+    if (existingEmployee) {
+      setFormData({
+        name: existingEmployee.name || '',
+        email: existingEmployee.email || '',
+        phone: existingEmployee.phone || '',
+        birth_date: existingEmployee.birth_date || '',
+        employee_number: existingEmployee.employee_number || '',
+        department: existingEmployee.department || '',
+        position: existingEmployee.position || '',
+        hire_date: existingEmployee.hire_date || '',
+        hourly_rate: existingEmployee.hourly_rate || 10000,
+        monthly_salary: existingEmployee.monthly_salary || 0,
+        salary_type: existingEmployee.salary_type || 'hourly',
+        password: '',
+        passwordConfirm: '',
+      });
+    }
+  }, [existingEmployee]);
+
+  // 직원 생성
+  const createMutation = useMutation({
+    mutationFn: async (data: EmployeeFormData) => {
+      const employee = await createEmployee({
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+        birth_date: data.birth_date || null,
+        employee_number: data.employee_number || null,
+        department: data.department || null,
+        position: data.position || null,
+        hire_date: data.hire_date || null,
+        hourly_rate: data.hourly_rate,
+        monthly_salary: data.monthly_salary || null,
+        salary_type: data.salary_type,
+        is_active: true,
+      });
+      
+      // 비밀번호 설정
+      if (data.password) {
+        await createEmployeeCredentials(employee.id, data.password);
+      }
+      
+      return employee;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      toast.success('직원이 등록되었습니다');
+      navigate('/employees');
+    },
+    onError: (error: Error) => {
+      console.error('Create error:', error);
+      toast.error('직원 등록 중 오류가 발생했습니다');
+    },
+  });
+
+  // 직원 수정
+  const updateMutation = useMutation({
+    mutationFn: async (data: EmployeeFormData) => {
+      const employee = await updateEmployee(id!, {
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+        birth_date: data.birth_date || null,
+        employee_number: data.employee_number || null,
+        department: data.department || null,
+        position: data.position || null,
+        hire_date: data.hire_date || null,
+        hourly_rate: data.hourly_rate,
+        monthly_salary: data.monthly_salary || null,
+        salary_type: data.salary_type,
+      });
+      
+      // 비밀번호 변경
+      if (data.password) {
+        await createEmployeeCredentials(employee.id, data.password);
+      }
+      
+      return employee;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employee', id] });
+      toast.success('직원 정보가 수정되었습니다');
+      navigate('/employees');
+    },
+    onError: (error: Error) => {
+      console.error('Update error:', error);
+      toast.error('직원 수정 중 오류가 발생했습니다');
+    },
+  });
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   // 폼 필드 변경
   const handleChange = (
@@ -127,30 +183,7 @@ export function EmployeeFormPage() {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'baseSalary' ? Number(value) : value,
-    }));
-  };
-
-  // 프로필 이미지 업로드
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({
-          ...prev,
-          profileImage: reader.result as string,
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // 프로필 이미지 삭제
-  const handleImageRemove = () => {
-    setFormData((prev) => ({
-      ...prev,
-      profileImage: null,
+      [name]: name === 'hourly_rate' || name === 'monthly_salary' ? Number(value) : value,
     }));
   };
 
@@ -160,7 +193,7 @@ export function EmployeeFormPage() {
     const number = String(Math.floor(Math.random() * 900) + 100);
     setFormData((prev) => ({
       ...prev,
-      employeeNumber: `${prefix}${number}`,
+      employee_number: `${prefix}${number}`,
     }));
   };
 
@@ -169,41 +202,6 @@ export function EmployeeFormPage() {
     if (!formData.name.trim()) {
       toast.error('이름을 입력해주세요');
       setActiveTab('basic');
-      return false;
-    }
-    if (!formData.email.trim()) {
-      toast.error('이메일을 입력해주세요');
-      setActiveTab('basic');
-      return false;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      toast.error('올바른 이메일 형식을 입력해주세요');
-      setActiveTab('basic');
-      return false;
-    }
-    if (!formData.phone.trim()) {
-      toast.error('연락처를 입력해주세요');
-      setActiveTab('basic');
-      return false;
-    }
-    if (!formData.employeeNumber.trim()) {
-      toast.error('사원번호를 입력해주세요');
-      setActiveTab('job');
-      return false;
-    }
-    if (!formData.department) {
-      toast.error('부서를 선택해주세요');
-      setActiveTab('job');
-      return false;
-    }
-    if (!formData.position) {
-      toast.error('직급을 선택해주세요');
-      setActiveTab('job');
-      return false;
-    }
-    if (!formData.hireDate) {
-      toast.error('입사일을 입력해주세요');
-      setActiveTab('job');
       return false;
     }
     if (!isEdit) {
@@ -232,18 +230,10 @@ export function EmployeeFormPage() {
 
     if (!validateForm()) return;
 
-    setIsSaving(true);
-
-    try {
-      // TODO: API 연동
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      toast.success(isEdit ? '직원 정보가 수정되었습니다' : '직원이 등록되었습니다');
-      navigate('/employees');
-    } catch (error) {
-      toast.error('저장 중 오류가 발생했습니다');
-    } finally {
-      setIsSaving(false);
+    if (isEdit) {
+      updateMutation.mutate(formData);
+    } else {
+      createMutation.mutate(formData);
     }
   };
 
@@ -253,6 +243,14 @@ export function EmployeeFormPage() {
     { id: 'salary', label: '급여 정보', icon: CreditCard },
     { id: 'auth', label: '인증 정보', icon: Eye },
   ];
+
+  if (isEdit && loadingEmployee) {
+    return (
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -307,50 +305,6 @@ export function EmployeeFormPage() {
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold text-gray-900">기본 정보</h2>
 
-                {/* 프로필 이미지 */}
-                <div className="flex items-start gap-6">
-                  <div className="relative">
-                    <div className="w-24 h-24 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center">
-                      {formData.profileImage ? (
-                        <img
-                          src={formData.profileImage}
-                          alt="프로필"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <User size={32} className="text-gray-400" />
-                      )}
-                    </div>
-                    {formData.profileImage && (
-                      <button
-                        type="button"
-                        onClick={handleImageRemove}
-                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                  <div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-sm"
-                    >
-                      <Upload size={16} />
-                      이미지 업로드
-                    </button>
-                    <p className="text-xs text-gray-500 mt-2">JPG, PNG (최대 5MB)</p>
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -367,7 +321,7 @@ export function EmployeeFormPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      이메일 <span className="text-red-500">*</span>
+                      이메일
                     </label>
                     <input
                       type="email"
@@ -380,7 +334,7 @@ export function EmployeeFormPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      연락처 <span className="text-red-500">*</span>
+                      연락처
                     </label>
                     <input
                       type="tel"
@@ -395,47 +349,9 @@ export function EmployeeFormPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">생년월일</label>
                     <input
                       type="date"
-                      name="birthDate"
-                      value={formData.birthDate}
+                      name="birth_date"
+                      value={formData.birth_date}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">성별</label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="gender"
-                          value="male"
-                          checked={formData.gender === 'male'}
-                          onChange={handleChange}
-                          className="text-primary-600"
-                        />
-                        <span className="text-sm">남성</span>
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="gender"
-                          value="female"
-                          checked={formData.gender === 'female'}
-                          onChange={handleChange}
-                          className="text-primary-600"
-                        />
-                        <span className="text-sm">여성</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">주소</label>
-                    <input
-                      type="text"
-                      name="address"
-                      value={formData.address}
-                      onChange={handleChange}
-                      placeholder="서울시 강남구..."
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
@@ -450,13 +366,13 @@ export function EmployeeFormPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      사원번호 <span className="text-red-500">*</span>
+                      사원번호
                     </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        name="employeeNumber"
-                        value={formData.employeeNumber}
+                        name="employee_number"
+                        value={formData.employee_number}
                         onChange={handleChange}
                         placeholder="EMP001"
                         className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -472,24 +388,7 @@ export function EmployeeFormPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      고용형태 <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="employmentType"
-                      value={formData.employmentType}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      {employmentTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      부서 <span className="text-red-500">*</span>
+                      부서
                     </label>
                     <select
                       name="department"
@@ -507,7 +406,7 @@ export function EmployeeFormPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      직급 <span className="text-red-500">*</span>
+                      직급
                     </label>
                     <select
                       name="position"
@@ -525,22 +424,12 @@ export function EmployeeFormPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      입사일 <span className="text-red-500">*</span>
+                      입사일
                     </label>
                     <input
                       type="date"
-                      name="hireDate"
-                      value={formData.hireDate}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">퇴사일</label>
-                    <input
-                      type="date"
-                      name="resignDate"
-                      value={formData.resignDate}
+                      name="hire_date"
+                      value={formData.hire_date}
                       onChange={handleChange}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
@@ -554,62 +443,61 @@ export function EmployeeFormPage() {
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold text-gray-900">급여 정보</h2>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">기본급</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        name="baseSalary"
-                        value={formData.baseSalary || ''}
-                        onChange={handleChange}
-                        placeholder="3000000"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-                        원
-                      </span>
-                    </div>
-                  </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">은행</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">급여 유형</label>
                     <select
-                      name="bankName"
-                      value={formData.bankName}
+                      name="salary_type"
+                      value={formData.salary_type}
                       onChange={handleChange}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
-                      <option value="">선택하세요</option>
-                      {banks.map((bank) => (
-                        <option key={bank} value={bank}>
-                          {bank}
-                        </option>
-                      ))}
+                      <option value="hourly">시급</option>
+                      <option value="monthly">월급</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      계좌번호
-                    </label>
-                    <input
-                      type="text"
-                      name="accountNumber"
-                      value={formData.accountNumber}
-                      onChange={handleChange}
-                      placeholder="123-456-789012"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">예금주</label>
-                    <input
-                      type="text"
-                      name="accountHolder"
-                      value={formData.accountHolder}
-                      onChange={handleChange}
-                      placeholder="홍길동"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
+                  
+                  {formData.salary_type === 'hourly' ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">시급</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          name="hourly_rate"
+                          value={formData.hourly_rate || ''}
+                          onChange={handleChange}
+                          placeholder="10000"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                          원
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">월급</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          name="monthly_salary"
+                          value={formData.monthly_salary || ''}
+                          onChange={handleChange}
+                          placeholder="3000000"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                          원
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    <strong>안내:</strong> 시급제 직원은 출퇴근 기록을 기반으로 급여가 자동 계산됩니다.
+                    월급제 직원은 고정 월급이 지급됩니다.
+                  </p>
                 </div>
               </div>
             )}
@@ -683,7 +571,11 @@ export function EmployeeFormPage() {
             disabled={isSaving}
             className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
           >
-            <Save size={18} />
+            {isSaving ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <Save size={18} />
+            )}
             {isSaving ? '저장 중...' : isEdit ? '수정하기' : '등록하기'}
           </button>
         </div>

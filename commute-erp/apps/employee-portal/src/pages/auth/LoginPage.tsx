@@ -1,5 +1,5 @@
 // =====================================================
-// Employee Login Page
+// Employee Login Page (Supabase 연동)
 // =====================================================
 
 import { useState } from 'react';
@@ -7,15 +7,22 @@ import { useNavigate } from 'react-router-dom';
 import { Clock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../stores/authStore';
+import { employeeLogin } from '../../lib/api';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login } = useAuthStore();
+  const { login, isAuthenticated } = useAuthStore();
 
   const [employeeNumber, setEmployeeNumber] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // 이미 로그인된 경우
+  if (isAuthenticated) {
+    navigate('/', { replace: true });
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,48 +40,28 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      // TODO: 실제 API 연동
-      // const response = await fetch('/functions/v1/employee-login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ employeeNumber, password }),
-      // });
+      const result = await employeeLogin(employeeNumber, password);
 
-      // 데모: 하드코딩된 계정
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      if (employeeNumber === 'EMP001' && password === '1234') {
-        const mockEmployee = {
-          id: '1',
-          employeeNumber: 'EMP001',
-          name: '홍길동',
-          department: '개발팀',
-          position: '선임',
-          email: 'hong@example.com',
-          phone: '010-1234-5678',
-        };
-
-        login(mockEmployee, 'demo-token');
-        toast.success(`${mockEmployee.name}님, 환영합니다!`);
-        navigate('/');
-      } else if (employeeNumber === 'EMP002' && password === '1234') {
-        const mockEmployee = {
-          id: '2',
-          employeeNumber: 'EMP002',
-          name: '김영희',
-          department: '영업팀',
-          position: '대리',
-          email: 'kim@example.com',
-          phone: '010-2345-6789',
-        };
-
-        login(mockEmployee, 'demo-token');
-        toast.success(`${mockEmployee.name}님, 환영합니다!`);
+      if (result.success && result.employee) {
+        login({
+          id: result.employee.id,
+          employee_number: result.employee.employee_number,
+          name: result.employee.name,
+          department: result.employee.department,
+          position: result.employee.position,
+          email: result.employee.email,
+          phone: result.employee.phone,
+          hourly_rate: result.employee.hourly_rate,
+          salary_type: result.employee.salary_type,
+          hire_date: result.employee.hire_date,
+        });
+        toast.success(`${result.employee.name}님, 환영합니다!`);
         navigate('/');
       } else {
-        toast.error('사원번호 또는 비밀번호가 올바르지 않습니다');
+        toast.error(result.error || '로그인에 실패했습니다');
       }
-    } catch {
+    } catch (err) {
+      console.error('Login error:', err);
       toast.error('로그인 중 오류가 발생했습니다');
     } finally {
       setIsLoading(false);
@@ -108,6 +95,7 @@ export function LoginPage() {
                 placeholder="EMP001"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                 disabled={isLoading}
+                autoFocus
               />
             </div>
 
@@ -152,23 +140,19 @@ export function LoginPage() {
             </button>
           </form>
 
-          {/* 데모 안내 */}
+          {/* 안내 */}
           <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-            <p className="text-xs text-gray-500 text-center mb-2">데모 계정</p>
-            <div className="text-xs text-gray-600 space-y-1">
-              <p>
-                <span className="font-medium">사원번호:</span> EMP001 또는 EMP002
-              </p>
-              <p>
-                <span className="font-medium">비밀번호:</span> 1234
-              </p>
-            </div>
+            <p className="text-xs text-gray-500 text-center">
+              사원번호와 비밀번호를 입력하여 로그인하세요.
+              <br />
+              비밀번호를 잊으셨다면 관리자에게 문의하세요.
+            </p>
           </div>
         </div>
 
         {/* 푸터 */}
         <p className="text-center text-sm text-gray-400 mt-6">
-          &copy; 2024 출퇴근 ERP. All rights reserved.
+          &copy; 2025 출퇴근 ERP. All rights reserved.
         </p>
       </div>
     </div>

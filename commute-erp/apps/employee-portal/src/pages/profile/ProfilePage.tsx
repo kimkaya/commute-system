@@ -19,10 +19,14 @@ import {
   FileText,
   Eye,
   EyeOff,
+  Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../stores/authStore';
+import { changePassword } from '../../lib/api';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
 
 export function ProfilePage() {
   const navigate = useNavigate();
@@ -33,6 +37,7 @@ export function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleLogout = () => {
     if (confirm('로그아웃 하시겠습니까?')) {
@@ -41,8 +46,10 @@ export function ProfilePage() {
     }
   };
 
-  const handlePasswordChange = (e: React.FormEvent) => {
+  const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!employee?.id) return;
 
     if (!currentPassword) {
       toast.error('현재 비밀번호를 입력해주세요');
@@ -61,12 +68,35 @@ export function ProfilePage() {
       return;
     }
 
-    // TODO: API 연동
-    toast.success('비밀번호가 변경되었습니다');
-    setShowPasswordModal(false);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    setSubmitting(true);
+    try {
+      const result = await changePassword(employee.id, currentPassword, newPassword);
+      
+      if (result.success) {
+        toast.success('비밀번호가 변경되었습니다');
+        setShowPasswordModal(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        toast.error(result.error || '비밀번호 변경에 실패했습니다');
+      }
+    } catch (error) {
+      console.error('Password change error:', error);
+      toast.error('비밀번호 변경 중 오류가 발생했습니다');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 입사일 포맷팅
+  const formatHireDate = () => {
+    if (!employee?.hire_date) return '-';
+    try {
+      return format(new Date(employee.hire_date), 'yyyy년 M월 d일', { locale: ko });
+    } catch {
+      return employee.hire_date;
+    }
   };
 
   return (
@@ -84,7 +114,7 @@ export function ProfilePage() {
             <p className="text-sm text-gray-500">
               {employee?.department} · {employee?.position}
             </p>
-            <p className="text-xs text-gray-400 mt-1">사원번호: {employee?.employeeNumber}</p>
+            <p className="text-xs text-gray-400 mt-1">사원번호: {employee?.employee_number}</p>
           </div>
         </div>
       </div>
@@ -137,7 +167,7 @@ export function ProfilePage() {
             </div>
             <div className="flex-1">
               <p className="text-xs text-gray-500">입사일</p>
-              <p className="text-sm font-medium text-gray-900">2022년 3월 1일</p>
+              <p className="text-sm font-medium text-gray-900">{formatHireDate()}</p>
             </div>
           </div>
         </div>
@@ -176,7 +206,10 @@ export function ProfilePage() {
       {/* 기타 */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
         <div className="divide-y divide-gray-100">
-          <button className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors">
+          <button 
+            onClick={() => navigate('/privacy')}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+          >
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                 <Shield size={18} className="text-gray-500" />
@@ -185,7 +218,10 @@ export function ProfilePage() {
             </div>
             <ChevronRight size={18} className="text-gray-400" />
           </button>
-          <button className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors">
+          <button 
+            onClick={() => navigate('/terms')}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+          >
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                 <FileText size={18} className="text-gray-500" />
@@ -194,12 +230,15 @@ export function ProfilePage() {
             </div>
             <ChevronRight size={18} className="text-gray-400" />
           </button>
-          <button className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors">
+          <button 
+            onClick={() => navigate('/support')}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+          >
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                 <HelpCircle size={18} className="text-gray-500" />
               </div>
-              <span className="text-sm font-medium text-gray-900">고객센터</span>
+              <span className="text-sm font-medium text-gray-900">관리자에게 문의하기</span>
             </div>
             <ChevronRight size={18} className="text-gray-400" />
           </button>
@@ -294,14 +333,17 @@ export function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => setShowPasswordModal(false)}
-                  className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  disabled={submitting}
+                  className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 transition-colors"
+                  disabled={submitting}
+                  className="flex-1 py-3 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
+                  {submitting && <Loader2 size={16} className="animate-spin" />}
                   변경하기
                 </button>
               </div>

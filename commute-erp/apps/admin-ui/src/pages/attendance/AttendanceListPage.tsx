@@ -1,8 +1,9 @@
 // =====================================================
-// 출퇴근 관리 페이지
+// 출퇴근 관리 페이지 (Supabase 연동)
 // =====================================================
 
 import { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '../../components/layout/Header';
 import {
   Search,
@@ -13,65 +14,14 @@ import {
   Edit,
   Clock,
   AlertCircle,
+  Loader2,
+  LogIn,
+  LogOut,
+  Plus,
 } from 'lucide-react';
-
-interface AttendanceRecord {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  employeeNumber: string;
-  department: string;
-  date: string;
-  checkIn: string | null;
-  checkOut: string | null;
-  breakMinutes: number;
-  workMinutes: number;
-  status: 'normal' | 'late' | 'early_leave' | 'absent' | 'on_leave';
-  notes: string | null;
-}
-
-// 데모 데이터
-const generateDemoRecords = (): AttendanceRecord[] => {
-  const today = new Date();
-  const records: AttendanceRecord[] = [];
-  const employees = [
-    { id: '1', name: '김철수', number: 'EMP001', department: '개발팀' },
-    { id: '2', name: '이영희', number: 'EMP002', department: '디자인팀' },
-    { id: '3', name: '박지성', number: 'EMP003', department: '영업팀' },
-    { id: '4', name: '최민수', number: 'EMP004', department: '개발팀' },
-    { id: '5', name: '정유진', number: 'EMP005', department: '인사팀' },
-  ];
-
-  employees.forEach((emp, idx) => {
-    const checkIn = idx === 2 ? '09:15' : idx === 4 ? null : `0${8 + Math.floor(Math.random() * 2)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`;
-    const checkOut = idx === 4 ? null : idx === 1 ? '17:30' : null;
-    const status = idx === 2 ? 'late' : idx === 1 ? 'early_leave' : idx === 4 ? 'on_leave' : 'normal';
-
-    records.push({
-      id: `${idx + 1}`,
-      employeeId: emp.id,
-      employeeName: emp.name,
-      employeeNumber: emp.number,
-      department: emp.department,
-      date: today.toISOString().split('T')[0],
-      checkIn,
-      checkOut,
-      breakMinutes: 60,
-      workMinutes: checkIn && checkOut ? calculateWorkMinutes(checkIn, checkOut, 60) : 0,
-      status,
-      notes: status === 'on_leave' ? '연차' : null,
-    });
-  });
-
-  return records;
-};
-
-function calculateWorkMinutes(checkIn: string, checkOut: string, breakMinutes: number): number {
-  const [inH, inM] = checkIn.split(':').map(Number);
-  const [outH, outM] = checkOut.split(':').map(Number);
-  const totalMinutes = (outH * 60 + outM) - (inH * 60 + inM);
-  return Math.max(0, totalMinutes - breakMinutes);
-}
+import { getAttendanceRecords, getEmployees, updateAttendance, checkIn, checkOut } from '../../lib/api';
+import type { AttendanceRecord, Employee } from '../../lib/api';
+import toast from 'react-hot-toast';
 
 function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
@@ -81,58 +31,144 @@ function formatDuration(minutes: number): string {
   return `${hours}시간 ${mins}분`;
 }
 
+function calculateWorkMinutes(checkInTime: string | null, checkOutTime: string | null, breakMinutes: number = 60): number {
+  if (!checkInTime || !checkOutTime) return 0;
+  const [inH, inM] = checkInTime.split(':').map(Number);
+  const [outH, outM] = checkOutTime.split(':').map(Number);
+  const totalMinutes = (outH * 60 + outM) - (inH * 60 + inM);
+  return Math.max(0, totalMinutes - breakMinutes);
+}
+
 export function AttendanceListPage() {
-  const [records, setRecords] = useState<AttendanceRecord[]>(generateDemoRecords());
+  const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
+  const [editForm, setEditForm] = useState({ check_in: '', check_out: '', notes: '' });
+  const [showManualCheckIn, setShowManualCheckIn] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+
+  // 출퇴근 기록 조회
+  const { data: records, isLoading } = useQuery({
+    queryKey: ['attendance', selectedDate],
+    queryFn: () => getAttendanceRecords({ date: selectedDate }),
+  });
+
+  // 직원 목록
+  const { data: employees } = useQuery({
+    queryKey: ['employees-active'],
+    queryFn: () => getEmployees({ is_active: true }),
+  });
+
+  // 출퇴근 수정
+  const updateMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<AttendanceRecord> }) =>
+      updateAttendance(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      toast.success('출퇴근 기록이 수정되었습니다');
+      setEditingRecord(null);
+    },
+    onError: () => {
+      toast.error('수정 중 오류가 발생했습니다');
+    },
+  });
+
+  // 수동 출근
+  const checkInMutation = useMutation({
+    mutationFn: (employeeId: string) => checkIn(employeeId, 'admin'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      toast.success('출근 처리되었습니다');
+      setShowManualCheckIn(false);
+      setSelectedEmployeeId('');
+    },
+    onError: () => {
+      toast.error('출근 처리 중 오류가 발생했습니다');
+    },
+  });
+
+  // 수동 퇴근
+  const checkOutMutation = useMutation({
+    mutationFn: (employeeId: string) => checkOut(employeeId, 'admin'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      toast.success('퇴근 처리되었습니다');
+    },
+    onError: () => {
+      toast.error('퇴근 처리 중 오류가 발생했습니다');
+    },
+  });
+
+  // 부서 목록
+  const departments = useMemo(() => {
+    if (!employees) return [];
+    const depts = new Set(employees.map(e => e.department).filter(Boolean));
+    return Array.from(depts) as string[];
+  }, [employees]);
 
   // 필터링된 기록
   const filteredRecords = useMemo(() => {
+    if (!records) return [];
     return records.filter((record) => {
       const matchesSearch =
-        record.employeeName.includes(searchTerm) ||
-        record.employeeNumber.includes(searchTerm);
+        (record.employee?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (record.employee?.employee_number || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesDepartment =
-        departmentFilter === 'all' || record.department === departmentFilter;
-      const matchesStatus =
-        statusFilter === 'all' || record.status === statusFilter;
-      return matchesSearch && matchesDepartment && matchesStatus;
+        departmentFilter === 'all' || record.employee?.department === departmentFilter;
+      return matchesSearch && matchesDepartment;
     });
-  }, [records, searchTerm, departmentFilter, statusFilter]);
+  }, [records, searchTerm, departmentFilter]);
 
   // 통계
   const stats = useMemo(() => {
-    const total = records.length;
-    const checkedIn = records.filter((r) => r.checkIn && r.status !== 'on_leave').length;
-    const checkedOut = records.filter((r) => r.checkOut).length;
-    const late = records.filter((r) => r.status === 'late').length;
-    const onLeave = records.filter((r) => r.status === 'on_leave').length;
-    return { total, checkedIn, checkedOut, late, onLeave };
-  }, [records]);
-
-  const getStatusBadge = (status: AttendanceRecord['status']) => {
-    switch (status) {
-      case 'normal':
-        return <span className="badge badge-success">정상</span>;
-      case 'late':
-        return <span className="badge badge-warning">지각</span>;
-      case 'early_leave':
-        return <span className="badge badge-warning">조퇴</span>;
-      case 'absent':
-        return <span className="badge badge-danger">결근</span>;
-      case 'on_leave':
-        return <span className="badge bg-primary-50 text-primary-600">휴가</span>;
-    }
-  };
+    const total = employees?.length || 0;
+    const checkedIn = records?.filter(r => r.check_in).length || 0;
+    const checkedOut = records?.filter(r => r.check_out).length || 0;
+    const working = checkedIn - checkedOut;
+    return { total, checkedIn, checkedOut, working };
+  }, [records, employees]);
 
   const handleDateChange = (days: number) => {
     const date = new Date(selectedDate);
     date.setDate(date.getDate() + days);
     setSelectedDate(date.toISOString().split('T')[0]);
   };
+
+  const handleEdit = (record: AttendanceRecord) => {
+    setEditingRecord(record);
+    setEditForm({
+      check_in: record.check_in || '',
+      check_out: record.check_out || '',
+      notes: record.notes || '',
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingRecord) return;
+    updateMutation.mutate({
+      id: editingRecord.id,
+      updates: {
+        check_in: editForm.check_in || null,
+        check_out: editForm.check_out || null,
+        notes: editForm.notes || null,
+      },
+    });
+  };
+
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+
+  if (isLoading) {
+    return (
+      <div>
+        <Header title="출퇴근 관리" subtitle="로딩 중..." />
+        <div className="mt-16 flex items-center justify-center h-[50vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -143,17 +179,11 @@ export function AttendanceListPage() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           {/* 날짜 선택 */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleDateChange(-1)}
-              className="btn btn-ghost btn-sm"
-            >
+            <button onClick={() => handleDateChange(-1)} className="btn btn-ghost btn-sm">
               <ChevronLeft size={18} />
             </button>
             <div className="relative">
-              <Calendar
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={18}
-              />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="date"
                 value={selectedDate}
@@ -161,10 +191,7 @@ export function AttendanceListPage() {
                 className="input pl-10 w-44"
               />
             </div>
-            <button
-              onClick={() => handleDateChange(1)}
-              className="btn btn-ghost btn-sm"
-            >
+            <button onClick={() => handleDateChange(1)} className="btn btn-ghost btn-sm">
               <ChevronRight size={18} />
             </button>
             <button
@@ -184,18 +211,11 @@ export function AttendanceListPage() {
               출근 <strong>{stats.checkedIn}</strong>명
             </span>
             <span className="text-primary-600">
+              근무중 <strong>{stats.working}</strong>명
+            </span>
+            <span className="text-gray-500">
               퇴근 <strong>{stats.checkedOut}</strong>명
             </span>
-            {stats.late > 0 && (
-              <span className="text-warning-600">
-                지각 <strong>{stats.late}</strong>명
-              </span>
-            )}
-            {stats.onLeave > 0 && (
-              <span className="text-gray-500">
-                휴가 <strong>{stats.onLeave}</strong>명
-              </span>
-            )}
           </div>
         </div>
 
@@ -204,10 +224,7 @@ export function AttendanceListPage() {
           <div className="flex flex-col sm:flex-row gap-3">
             {/* 검색 */}
             <div className="relative">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={18}
-              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
                 placeholder="이름, 사번 검색..."
@@ -224,31 +241,30 @@ export function AttendanceListPage() {
               className="input w-full sm:w-36"
             >
               <option value="all">모든 부서</option>
-              <option value="개발팀">개발팀</option>
-              <option value="디자인팀">디자인팀</option>
-              <option value="영업팀">영업팀</option>
-              <option value="인사팀">인사팀</option>
-            </select>
-
-            {/* 상태 필터 */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="input w-full sm:w-32"
-            >
-              <option value="all">모든 상태</option>
-              <option value="normal">정상</option>
-              <option value="late">지각</option>
-              <option value="early_leave">조퇴</option>
-              <option value="on_leave">휴가</option>
+              {departments.map((dept) => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
             </select>
           </div>
 
-          {/* 엑셀 내보내기 */}
-          <button className="btn btn-secondary">
-            <Download size={18} />
-            엑셀 다운로드
-          </button>
+          <div className="flex gap-2">
+            {/* 수동 출퇴근 버튼 (오늘만) */}
+            {isToday && (
+              <button
+                onClick={() => setShowManualCheckIn(true)}
+                className="btn btn-primary"
+              >
+                <Plus size={18} />
+                수동 출퇴근
+              </button>
+            )}
+            
+            {/* 엑셀 내보내기 */}
+            <button className="btn btn-secondary">
+              <Download size={18} />
+              엑셀 다운로드
+            </button>
+          </div>
         </div>
 
         {/* 출퇴근 테이블 */}
@@ -257,115 +273,106 @@ export function AttendanceListPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                    직원
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                    부서
-                  </th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">
-                    출근
-                  </th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">
-                    퇴근
-                  </th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">
-                    휴게
-                  </th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">
-                    근무시간
-                  </th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">
-                    상태
-                  </th>
-                  <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">
-                    액션
-                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">직원</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">부서</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">출근</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">퇴근</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">근무시간</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">인증방법</th>
+                  <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">액션</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredRecords.map((record) => (
-                  <tr key={record.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                          <span className="text-sm font-medium text-primary-700">
-                            {record.employeeName.charAt(0)}
+                {filteredRecords.map((record) => {
+                  const workMinutes = calculateWorkMinutes(record.check_in, record.check_out);
+                  return (
+                    <tr key={record.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium text-primary-700">
+                              {record.employee?.name?.charAt(0) || '?'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {record.employee?.name || '알 수 없음'}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {record.employee?.employee_number || '-'}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-sm text-gray-600">{record.employee?.department || '-'}</p>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {record.check_in ? (
+                          <span className="text-sm font-medium text-green-600">
+                            <LogIn className="w-4 h-4 inline mr-1" />
+                            {record.check_in}
                           </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {record.employeeName}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {record.employeeNumber}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-gray-600">{record.department}</p>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {record.checkIn ? (
-                        <span
-                          className={`text-sm font-medium ${
-                            record.status === 'late' ? 'text-warning-600' : 'text-gray-900'
-                          }`}
+                        ) : (
+                          <span className="text-sm text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {record.check_out ? (
+                          <span className="text-sm font-medium text-gray-600">
+                            <LogOut className="w-4 h-4 inline mr-1" />
+                            {record.check_out}
+                          </span>
+                        ) : record.check_in ? (
+                          isToday ? (
+                            <button
+                              onClick={() => checkOutMutation.mutate(record.employee_id)}
+                              className="btn btn-primary btn-sm"
+                              disabled={checkOutMutation.isPending}
+                            >
+                              퇴근처리
+                            </button>
+                          ) : (
+                            <span className="text-sm text-orange-500">미퇴근</span>
+                          )
+                        ) : (
+                          <span className="text-sm text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {workMinutes > 0 ? (
+                          <span className="text-sm font-medium text-gray-900">
+                            {formatDuration(workMinutes)}
+                          </span>
+                        ) : record.check_in && !record.check_out ? (
+                          <span className="badge badge-success">근무중</span>
+                        ) : (
+                          <span className="text-sm text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`badge ${
+                          record.check_in_method === 'face' ? 'badge-primary' :
+                          record.check_in_method === 'password' ? 'badge-gray' :
+                          record.check_in_method === 'admin' ? 'badge-warning' : 'badge-gray'
+                        }`}>
+                          {record.check_in_method === 'face' ? '얼굴' :
+                           record.check_in_method === 'password' ? '비밀번호' :
+                           record.check_in_method === 'admin' ? '관리자' : '-'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => handleEdit(record)}
+                          className="btn btn-ghost btn-sm"
+                          title="수정"
                         >
-                          {record.checkIn}
-                        </span>
-                      ) : record.status === 'on_leave' ? (
-                        <span className="text-sm text-gray-400">-</span>
-                      ) : (
-                        <span className="text-sm text-gray-400">미출근</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {record.checkOut ? (
-                        <span
-                          className={`text-sm font-medium ${
-                            record.status === 'early_leave'
-                              ? 'text-warning-600'
-                              : 'text-gray-900'
-                          }`}
-                        >
-                          {record.checkOut}
-                        </span>
-                      ) : record.status === 'on_leave' ? (
-                        <span className="text-sm text-gray-400">-</span>
-                      ) : (
-                        <span className="text-sm text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-sm text-gray-600">
-                        {record.breakMinutes}분
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {record.workMinutes > 0 ? (
-                        <span className="text-sm font-medium text-gray-900">
-                          {formatDuration(record.workMinutes)}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {getStatusBadge(record.status)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => setEditingRecord(record)}
-                        className="btn btn-ghost btn-sm"
-                        title="수정"
-                      >
-                        <Edit size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                          <Edit size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -373,21 +380,72 @@ export function AttendanceListPage() {
           {filteredRecords.length === 0 && (
             <div className="py-12 text-center">
               <Clock className="mx-auto mb-3 text-gray-300" size={48} />
-              <p className="text-gray-500">출퇴근 기록이 없습니다.</p>
+              <p className="text-gray-500">
+                {selectedDate}의 출퇴근 기록이 없습니다.
+              </p>
             </div>
           )}
         </div>
+
+        {/* 수동 출퇴근 모달 */}
+        {showManualCheckIn && (
+          <div className="modal-overlay" onClick={() => setShowManualCheckIn(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">수동 출퇴근</h2>
+                <p className="text-sm text-gray-500 mt-1">직원을 선택하여 출근 처리합니다.</p>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="label">직원 선택</label>
+                  <select
+                    value={selectedEmployeeId}
+                    onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                    className="input w-full"
+                  >
+                    <option value="">직원을 선택하세요</option>
+                    {employees?.filter(emp => {
+                      // 이미 출근한 직원 제외
+                      const alreadyCheckedIn = records?.some(r => r.employee_id === emp.id);
+                      return !alreadyCheckedIn;
+                    }).map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.employee_number || emp.department || '-'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
+                  <AlertCircle className="text-blue-600 flex-shrink-0" size={18} />
+                  <p className="text-sm text-blue-700">
+                    관리자 권한으로 출근 처리됩니다. 감사 로그에 기록됩니다.
+                  </p>
+                </div>
+              </div>
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                <button onClick={() => setShowManualCheckIn(false)} className="btn btn-secondary">
+                  취소
+                </button>
+                <button
+                  onClick={() => selectedEmployeeId && checkInMutation.mutate(selectedEmployeeId)}
+                  disabled={!selectedEmployeeId || checkInMutation.isPending}
+                  className="btn btn-primary"
+                >
+                  {checkInMutation.isPending ? '처리 중...' : '출근 처리'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 수정 모달 */}
         {editingRecord && (
           <div className="modal-overlay" onClick={() => setEditingRecord(null)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="p-6 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  출퇴근 기록 수정
-                </h2>
+                <h2 className="text-lg font-semibold text-gray-900">출퇴근 기록 수정</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  {editingRecord.employeeName} ({editingRecord.date})
+                  {editingRecord.employee?.name} ({editingRecord.date})
                 </p>
               </div>
               <div className="p-6 space-y-4">
@@ -396,7 +454,8 @@ export function AttendanceListPage() {
                   <input
                     type="time"
                     className="input"
-                    defaultValue={editingRecord.checkIn || ''}
+                    value={editForm.check_in}
+                    onChange={(e) => setEditForm({ ...editForm, check_in: e.target.value })}
                   />
                 </div>
                 <div>
@@ -404,15 +463,8 @@ export function AttendanceListPage() {
                   <input
                     type="time"
                     className="input"
-                    defaultValue={editingRecord.checkOut || ''}
-                  />
-                </div>
-                <div>
-                  <label className="label">휴게 시간 (분)</label>
-                  <input
-                    type="number"
-                    className="input"
-                    defaultValue={editingRecord.breakMinutes}
+                    value={editForm.check_out}
+                    onChange={(e) => setEditForm({ ...editForm, check_out: e.target.value })}
                   />
                 </div>
                 <div>
@@ -420,7 +472,8 @@ export function AttendanceListPage() {
                   <textarea
                     className="input min-h-[80px]"
                     placeholder="수정 사유를 입력하세요"
-                    defaultValue={editingRecord.notes || ''}
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
                   />
                 </div>
                 <div className="flex items-center gap-2 p-3 bg-warning-50 rounded-lg">
@@ -431,20 +484,15 @@ export function AttendanceListPage() {
                 </div>
               </div>
               <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
-                <button
-                  onClick={() => setEditingRecord(null)}
-                  className="btn btn-secondary"
-                >
+                <button onClick={() => setEditingRecord(null)} className="btn btn-secondary">
                   취소
                 </button>
                 <button
-                  onClick={() => {
-                    // TODO: 저장 로직
-                    setEditingRecord(null);
-                  }}
+                  onClick={handleSaveEdit}
+                  disabled={updateMutation.isPending}
                   className="btn btn-primary"
                 >
-                  저장
+                  {updateMutation.isPending ? '저장 중...' : '저장'}
                 </button>
               </div>
             </div>

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Clock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { adminLogin } from '../../lib/api';
 import toast from 'react-hot-toast';
 
 export function LoginPage() {
@@ -36,11 +37,9 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      // TODO: 실제 Supabase Edge Function 호출로 대체
-      // 현재는 데모용으로 admin1234 하드코딩
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const result = await adminLogin(password);
 
-      if (password === 'admin1234') {
+      if (result.success) {
         login('00000000-0000-0000-0000-000000000001', '관리자', 30);
         toast.success('로그인 성공');
         const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
@@ -52,10 +51,11 @@ export function LoginPage() {
         if (newFailCount >= 5) {
           toast.error('5회 실패! 30분간 계정이 잠깁니다.');
         } else {
-          toast.error(`비밀번호가 틀렸습니다. (${newFailCount}/5)`);
+          toast.error(result.error || `비밀번호가 틀렸습니다. (${newFailCount}/5)`);
         }
       }
     } catch (error) {
+      console.error('Login error:', error);
       toast.error('로그인 중 오류가 발생했습니다');
     } finally {
       setIsLoading(false);

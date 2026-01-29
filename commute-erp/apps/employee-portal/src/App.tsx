@@ -15,6 +15,9 @@ import { MyAttendancePage } from './pages/attendance/MyAttendancePage';
 import { MyPayrollPage } from './pages/payroll/MyPayrollPage';
 import { MyLeavePage } from './pages/leave/MyLeavePage';
 import { ProfilePage } from './pages/profile/ProfilePage';
+import { PrivacyPolicyPage } from './pages/legal/PrivacyPolicyPage';
+import { TermsOfServicePage } from './pages/legal/TermsOfServicePage';
+import { SupportPage } from './pages/legal/SupportPage';
 
 // React Query 클라이언트
 const queryClient = new QueryClient({
@@ -48,6 +51,11 @@ function App() {
             {/* 내정보 */}
             <Route path="/profile" element={<ProfilePage />} />
           </Route>
+
+          {/* 법적 페이지 (레이아웃 없이) */}
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<TermsOfServicePage />} />
+          <Route path="/support" element={<SupportPage />} />
 
           {/* 404 */}
           <Route path="*" element={<Navigate to="/" replace />} />

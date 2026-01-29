@@ -2,7 +2,7 @@
 // 내 급여명세서 페이지
 // =====================================================
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Wallet,
   Download,
@@ -12,65 +12,74 @@ import {
   MinusCircle,
   Calendar,
   FileText,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useAuthStore } from '../../stores/authStore';
+import { getMyPayslips, type PayrollLine } from '../../lib/api';
+import { generatePayslipPdf, type PayslipData } from '../../lib/payslipPdf';
+import toast from 'react-hot-toast';
 
-// 데모 급여 데이터
-const mockPayrollData = [
-  {
-    id: '1',
-    period: '2024-01',
-    periodLabel: '2024년 1월',
-    payDate: '2024-02-10',
-    baseSalary: 3500000,
-    overtime: 320000,
-    bonus: 0,
-    totalEarnings: 3820000,
-    incomeTax: 152800,
-    healthInsurance: 133700,
-    nationalPension: 167580,
-    employmentInsurance: 30560,
-    totalDeductions: 484640,
-    netPay: 3335360,
-    status: 'paid',
-  },
-  {
-    id: '2',
-    period: '2023-12',
-    periodLabel: '2023년 12월',
-    payDate: '2024-01-10',
-    baseSalary: 3500000,
-    overtime: 450000,
-    bonus: 3500000, // 연말보너스
-    totalEarnings: 7450000,
-    incomeTax: 745000,
-    healthInsurance: 133700,
-    nationalPension: 167580,
-    employmentInsurance: 59600,
-    totalDeductions: 1105880,
-    netPay: 6344120,
-    status: 'paid',
-  },
-  {
-    id: '3',
-    period: '2023-11',
-    periodLabel: '2023년 11월',
-    payDate: '2023-12-10',
-    baseSalary: 3500000,
-    overtime: 280000,
-    bonus: 0,
-    totalEarnings: 3780000,
-    incomeTax: 151200,
-    healthInsurance: 133700,
-    nationalPension: 167580,
-    employmentInsurance: 30240,
-    totalDeductions: 482720,
-    netPay: 3297280,
-    status: 'paid',
-  },
-];
+interface PayrollDisplayData {
+  id: string;
+  period: string;
+  periodLabel: string;
+  payDate: string;
+  year: number;
+  month: number;
+  baseSalary: number;
+  overtime: number;
+  bonus: number;
+  totalEarnings: number;
+  incomeTax: number;
+  healthInsurance: number;
+  nationalPension: number;
+  employmentInsurance: number;
+  totalDeductions: number;
+  netPay: number;
+  status: string;
+  workDays: number;
+  totalHours: number;
+  overtimeHours: number;
+}
+
+// PayrollLine을 표시용 데이터로 변환
+function transformPayrollData(payslips: PayrollLine[]): PayrollDisplayData[] {
+  return payslips.map((p) => {
+    const year = p.payroll_period?.year || new Date().getFullYear();
+    const month = p.payroll_period?.month || 1;
+    
+    // 공제 항목 계산 (실제로는 DB에서 가져와야 함)
+    const incomeTax = Math.round(p.gross_pay * 0.04);
+    const healthInsurance = Math.round(p.gross_pay * 0.035);
+    const nationalPension = Math.round(p.gross_pay * 0.045);
+    const employmentInsurance = Math.round(p.gross_pay * 0.008);
+
+    return {
+      id: p.id,
+      period: `${year}-${String(month).padStart(2, '0')}`,
+      periodLabel: `${year}년 ${month}월`,
+      payDate: `${year}-${String(month + 1).padStart(2, '0')}-10`,
+      year,
+      month,
+      baseSalary: p.base_pay,
+      overtime: p.overtime_pay,
+      bonus: 0,
+      totalEarnings: p.gross_pay,
+      incomeTax,
+      healthInsurance,
+      nationalPension,
+      employmentInsurance,
+      totalDeductions: p.total_deductions || (incomeTax + healthInsurance + nationalPension + employmentInsurance),
+      netPay: p.net_pay,
+      status: p.status,
+      workDays: p.work_days,
+      totalHours: p.total_hours,
+      overtimeHours: p.overtime_hours,
+    };
+  });
+}
 
 // 금액 포맷팅
 function formatCurrency(amount: number): string {
@@ -79,17 +88,97 @@ function formatCurrency(amount: number): string {
 
 export function MyPayrollPage() {
   const { employee } = useAuthStore();
-  const [selectedPayroll, setSelectedPayroll] = useState<typeof mockPayrollData[0] | null>(null);
+  const [payrollData, setPayrollData] = useState<PayrollDisplayData[]>([]);
+  const [selectedPayroll, setSelectedPayroll] = useState<PayrollDisplayData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 데이터 로드
+  const loadData = useCallback(async () => {
+    if (!employee?.id) return;
+
+    setLoading(true);
+    try {
+      const payslips = await getMyPayslips(employee.id);
+      const transformed = transformPayrollData(payslips);
+      setPayrollData(transformed);
+    } catch (error) {
+      console.error('Failed to load payroll data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [employee?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // PDF 다운로드 핸들러
+  const handleDownloadPdf = (payroll: PayrollDisplayData) => {
+    if (!employee) return;
+
+    try {
+      const payslipData: PayslipData = {
+        employeeName: employee.name,
+        employeeNumber: employee.employee_number || '-',
+        department: employee.department || '-',
+        position: employee.position || '-',
+        year: payroll.year,
+        month: payroll.month,
+        payDate: payroll.payDate,
+        baseSalary: payroll.baseSalary,
+        overtimePay: payroll.overtime,
+        bonus: payroll.bonus,
+        allowances: 0,
+        totalEarnings: payroll.totalEarnings,
+        incomeTax: payroll.incomeTax,
+        healthInsurance: payroll.healthInsurance,
+        nationalPension: payroll.nationalPension,
+        employmentInsurance: payroll.employmentInsurance,
+        otherDeductions: 0,
+        totalDeductions: payroll.totalDeductions,
+        netPay: payroll.netPay,
+        workDays: payroll.workDays || 0,
+        totalHours: payroll.totalHours || 0,
+        overtimeHours: payroll.overtimeHours || 0,
+      };
+
+      generatePayslipPdf(payslipData);
+      toast.success('급여명세서가 다운로드되었습니다');
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      toast.error('PDF 생성에 실패했습니다');
+    }
+  };
 
   // 최근 급여
-  const latestPayroll = mockPayrollData[0];
+  const latestPayroll = payrollData[0];
 
   // 전월 대비 변화
-  const previousPayroll = mockPayrollData[1];
-  const netPayDiff = latestPayroll.netPay - (previousPayroll?.netPay || 0);
-  const netPayDiffPercent = previousPayroll
+  const previousPayroll = payrollData[1];
+  const netPayDiff = latestPayroll ? latestPayroll.netPay - (previousPayroll?.netPay || 0) : 0;
+  const netPayDiffPercent = previousPayroll && latestPayroll
     ? ((netPayDiff / previousPayroll.netPay) * 100).toFixed(1)
     : 0;
+
+  if (loading) {
+    return (
+      <div className="py-4 flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="animate-spin text-primary-600" size={32} />
+      </div>
+    );
+  }
+
+  if (payrollData.length === 0) {
+    return (
+      <div className="py-4">
+        <div className="bg-white rounded-2xl p-8 shadow-sm text-center">
+          <FileText size={48} className="mx-auto text-gray-300 mb-4" />
+          <p className="text-gray-500">급여 명세서가 없습니다</p>
+          <p className="text-sm text-gray-400 mt-1">급여가 지급되면 여기에 표시됩니다</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="py-4 space-y-4">
@@ -219,7 +308,10 @@ export function MyPayrollPage() {
         </div>
 
         {/* 다운로드 버튼 */}
-        <button className="w-full mt-4 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-2 transition-colors">
+        <button 
+          onClick={() => handleDownloadPdf(latestPayroll)}
+          className="w-full mt-4 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-2 transition-colors"
+        >
           <Download size={18} />
           급여명세서 다운로드
         </button>
@@ -229,11 +321,10 @@ export function MyPayrollPage() {
       <div className="bg-white rounded-2xl p-5 shadow-sm">
         <h3 className="font-semibold text-gray-900 mb-3">급여 이력</h3>
         <div className="space-y-2">
-          {mockPayrollData.map((payroll) => (
-            <button
+          {payrollData.map((payroll) => (
+            <div
               key={payroll.id}
-              onClick={() => setSelectedPayroll(payroll)}
-              className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors"
+              className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-primary-50 rounded-lg flex items-center justify-center">
@@ -246,26 +337,32 @@ export function MyPayrollPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-gray-900">
                   {formatCurrency(payroll.netPay)}원
                 </span>
-                <ChevronRight size={18} className="text-gray-400" />
+                <button
+                  onClick={() => handleDownloadPdf(payroll)}
+                  className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                  title="PDF 다운로드"
+                >
+                  <Download size={18} />
+                </button>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </div>
 
       {/* 연간 급여 요약 */}
       <div className="bg-white rounded-2xl p-5 shadow-sm">
-        <h3 className="font-semibold text-gray-900 mb-3">2024년 급여 요약</h3>
+        <h3 className="font-semibold text-gray-900 mb-3">{new Date().getFullYear()}년 급여 요약</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-gray-50 rounded-xl p-4">
             <p className="text-xs text-gray-500 mb-1">총 지급액</p>
             <p className="text-lg font-bold text-gray-900">
               {formatCurrency(
-                mockPayrollData.reduce((sum, p) => sum + p.totalEarnings, 0)
+                payrollData.reduce((sum, p) => sum + p.totalEarnings, 0)
               )}
               원
             </p>
@@ -274,7 +371,7 @@ export function MyPayrollPage() {
             <p className="text-xs text-gray-500 mb-1">총 공제액</p>
             <p className="text-lg font-bold text-red-500">
               {formatCurrency(
-                mockPayrollData.reduce((sum, p) => sum + p.totalDeductions, 0)
+                payrollData.reduce((sum, p) => sum + p.totalDeductions, 0)
               )}
               원
             </p>
@@ -282,7 +379,7 @@ export function MyPayrollPage() {
           <div className="bg-primary-50 rounded-xl p-4 col-span-2">
             <p className="text-xs text-primary-600 mb-1">총 실수령액</p>
             <p className="text-xl font-bold text-primary-700">
-              {formatCurrency(mockPayrollData.reduce((sum, p) => sum + p.netPay, 0))}원
+              {formatCurrency(payrollData.reduce((sum, p) => sum + p.netPay, 0))}원
             </p>
           </div>
         </div>

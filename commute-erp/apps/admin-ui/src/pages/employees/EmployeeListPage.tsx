@@ -1,14 +1,14 @@
 // =====================================================
-// 직원 목록 페이지
+// 직원 목록 페이지 (Supabase 연동)
 // =====================================================
 
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '../../components/layout/Header';
 import {
   Plus,
   Search,
-  Filter,
   MoreVertical,
   Edit,
   Trash2,
@@ -16,125 +16,63 @@ import {
   Key,
   UserCheck,
   UserX,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
-
-interface Employee {
-  id: string;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  position: string;
-  hireDate: string;
-  hourlyRate: number;
-  isActive: boolean;
-  hasFace: boolean;
-  hasPassword: boolean;
-}
-
-// 데모 데이터
-const demoEmployees: Employee[] = [
-  {
-    id: '1',
-    employeeNumber: 'EMP001',
-    name: '김철수',
-    department: '개발팀',
-    position: '선임',
-    hireDate: '2023-03-15',
-    hourlyRate: 15000,
-    isActive: true,
-    hasFace: true,
-    hasPassword: true,
-  },
-  {
-    id: '2',
-    employeeNumber: 'EMP002',
-    name: '이영희',
-    department: '디자인팀',
-    position: '주임',
-    hireDate: '2023-06-01',
-    hourlyRate: 12000,
-    isActive: true,
-    hasFace: true,
-    hasPassword: false,
-  },
-  {
-    id: '3',
-    employeeNumber: 'EMP003',
-    name: '박지성',
-    department: '영업팀',
-    position: '대리',
-    hireDate: '2022-11-20',
-    hourlyRate: 14000,
-    isActive: true,
-    hasFace: false,
-    hasPassword: true,
-  },
-  {
-    id: '4',
-    employeeNumber: 'EMP004',
-    name: '최민수',
-    department: '개발팀',
-    position: '사원',
-    hireDate: '2024-01-08',
-    hourlyRate: 10000,
-    isActive: true,
-    hasFace: true,
-    hasPassword: true,
-  },
-  {
-    id: '5',
-    employeeNumber: 'EMP005',
-    name: '정유진',
-    department: '인사팀',
-    position: '과장',
-    hireDate: '2021-05-10',
-    hourlyRate: 18000,
-    isActive: true,
-    hasFace: true,
-    hasPassword: true,
-  },
-  {
-    id: '6',
-    employeeNumber: 'EMP006',
-    name: '홍길동',
-    department: '영업팀',
-    position: '사원',
-    hireDate: '2024-06-15',
-    hourlyRate: 10000,
-    isActive: false,
-    hasFace: false,
-    hasPassword: false,
-  },
-];
+import { getEmployees, deleteEmployee } from '../../lib/api';
+import type { Employee } from '../../lib/api';
+import toast from 'react-hot-toast';
 
 export function EmployeeListPage() {
-  const [employees, setEmployees] = useState<Employee[]>(demoEmployees);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
+  // 직원 목록 조회
+  const { data: employees, isLoading, error } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => getEmployees(),
+  });
+
+  // 직원 삭제(비활성화)
+  const deleteMutation = useMutation({
+    mutationFn: deleteEmployee,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      toast.success('직원이 퇴사 처리되었습니다.');
+      setSelectedEmployeeId(null);
+    },
+    onError: () => {
+      toast.error('직원 삭제 중 오류가 발생했습니다.');
+    },
+  });
+
   // 부서 목록
   const departments = useMemo(() => {
-    const depts = new Set(employees.map((e) => e.department));
-    return Array.from(depts);
+    if (!employees) return [];
+    const depts = new Set(employees.map((e) => e.department).filter(Boolean));
+    return Array.from(depts) as string[];
   }, [employees]);
 
   // 필터링된 직원 목록
   const filteredEmployees = useMemo(() => {
+    if (!employees) return [];
+    
     return employees.filter((employee) => {
       const matchesSearch =
-        employee.name.includes(searchTerm) ||
-        employee.employeeNumber.includes(searchTerm) ||
-        employee.department.includes(searchTerm);
+        employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (employee.employee_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (employee.department || '').toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesDepartment =
         departmentFilter === 'all' || employee.department === departmentFilter;
 
       const matchesStatus =
         statusFilter === 'all' ||
-        (statusFilter === 'active' && employee.isActive) ||
-        (statusFilter === 'inactive' && !employee.isActive);
+        (statusFilter === 'active' && employee.is_active) ||
+        (statusFilter === 'inactive' && !employee.is_active);
 
       return matchesSearch && matchesDepartment && matchesStatus;
     });
@@ -144,9 +82,41 @@ export function EmployeeListPage() {
     return new Intl.NumberFormat('ko-KR').format(amount) + '원';
   };
 
+  const handleDelete = (id: string, name: string) => {
+    if (confirm(`${name} 직원을 퇴사 처리하시겠습니까?`)) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div>
+        <Header title="직원 관리" subtitle="로딩 중..." />
+        <div className="mt-16 flex items-center justify-center h-[50vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div>
+        <Header title="직원 관리" subtitle="오류" />
+        <div className="mt-16 flex items-center justify-center h-[50vh]">
+          <div className="text-center">
+            <AlertTriangle className="w-12 h-12 text-danger-500 mx-auto mb-4" />
+            <p className="text-gray-600">직원 목록을 불러오는 중 오류가 발생했습니다.</p>
+            <p className="text-sm text-gray-400 mt-2">Supabase 연결을 확인해주세요.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <Header title="직원 관리" subtitle={`총 ${employees.length}명`} />
+      <Header title="직원 관리" subtitle={`총 ${employees?.length || 0}명`} />
 
       <div className="mt-16">
         {/* 액션 바 */}
@@ -220,7 +190,7 @@ export function EmployeeListPage() {
                     시급
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                    인증
+                    급여유형
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
                     상태
@@ -231,7 +201,7 @@ export function EmployeeListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredEmployees.map((employee) => (
+                {filteredEmployees.map((employee: Employee) => (
                   <tr key={employee.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -241,53 +211,37 @@ export function EmployeeListPage() {
                           </span>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
+                          <Link 
+                            to={`/employees/${employee.id}`}
+                            className="text-sm font-medium text-gray-900 hover:text-primary-600"
+                          >
                             {employee.name}
-                          </p>
+                          </Link>
                           <p className="text-xs text-gray-500">
-                            {employee.employeeNumber}
+                            {employee.employee_number || '-'}
                           </p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-gray-900">{employee.department}</p>
-                      <p className="text-xs text-gray-500">{employee.position}</p>
+                      <p className="text-sm text-gray-900">{employee.department || '-'}</p>
+                      <p className="text-xs text-gray-500">{employee.position || '-'}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-gray-600">{employee.hireDate}</p>
+                      <p className="text-sm text-gray-600">{employee.hire_date || '-'}</p>
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-sm font-medium text-gray-900">
-                        {formatCurrency(employee.hourlyRate)}
+                        {formatCurrency(employee.hourly_rate)}
                       </p>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                            employee.hasFace
-                              ? 'bg-success-50 text-success-600'
-                              : 'bg-gray-100 text-gray-400'
-                          }`}
-                          title={employee.hasFace ? '얼굴 등록됨' : '얼굴 미등록'}
-                        >
-                          <Camera size={14} />
-                        </span>
-                        <span
-                          className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                            employee.hasPassword
-                              ? 'bg-success-50 text-success-600'
-                              : 'bg-gray-100 text-gray-400'
-                          }`}
-                          title={employee.hasPassword ? '비밀번호 등록됨' : '비밀번호 미등록'}
-                        >
-                          <Key size={14} />
-                        </span>
-                      </div>
+                      <span className={`badge ${employee.salary_type === 'monthly' ? 'badge-primary' : 'badge-gray'}`}>
+                        {employee.salary_type === 'monthly' ? '월급' : '시급'}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
-                      {employee.isActive ? (
+                      {employee.is_active ? (
                         <span className="badge badge-success">
                           <UserCheck size={12} className="mr-1" />
                           재직중
@@ -302,7 +256,7 @@ export function EmployeeListPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <Link
-                          to={`/employees/${employee.id}`}
+                          to={`/employees/${employee.id}/edit`}
                           className="btn btn-ghost btn-sm"
                         >
                           <Edit size={16} />
@@ -326,12 +280,15 @@ export function EmployeeListPage() {
                               </button>
                               <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                                 <Key size={16} />
-                                비밀번호 재설정
+                                비밀번호 설정
                               </button>
                               <hr className="my-1" />
-                              <button className="w-full px-4 py-2 text-left text-sm text-danger-600 hover:bg-danger-50 flex items-center gap-2">
+                              <button 
+                                onClick={() => handleDelete(employee.id, employee.name)}
+                                className="w-full px-4 py-2 text-left text-sm text-danger-600 hover:bg-danger-50 flex items-center gap-2"
+                              >
                                 <Trash2 size={16} />
-                                삭제
+                                퇴사 처리
                               </button>
                             </div>
                           )}
@@ -347,7 +304,15 @@ export function EmployeeListPage() {
           {/* 빈 상태 */}
           {filteredEmployees.length === 0 && (
             <div className="py-12 text-center">
-              <p className="text-gray-500">검색 결과가 없습니다.</p>
+              <p className="text-gray-500">
+                {employees?.length === 0 ? '등록된 직원이 없습니다.' : '검색 결과가 없습니다.'}
+              </p>
+              {employees?.length === 0 && (
+                <Link to="/employees/new" className="btn btn-primary mt-4">
+                  <Plus size={18} />
+                  첫 직원 등록하기
+                </Link>
+              )}
             </div>
           )}
         </div>

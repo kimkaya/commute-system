@@ -1,28 +1,29 @@
 // =====================================================
-// Employee Auth Store
+// Employee Auth Store (Supabase 연동)
 // =====================================================
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-interface Employee {
+export interface Employee {
   id: string;
-  employeeNumber: string;
+  employee_number: string | null;
   name: string;
-  department: string;
-  position: string;
-  email: string;
-  phone: string;
-  profileImage?: string;
+  department: string | null;
+  position: string | null;
+  email: string | null;
+  phone: string | null;
+  hourly_rate: number;
+  salary_type: 'hourly' | 'monthly';
+  hire_date: string | null;
 }
 
 interface AuthState {
   isAuthenticated: boolean;
   employee: Employee | null;
-  accessToken: string | null;
   
   // Actions
-  login: (employee: Employee, token: string) => void;
+  login: (employee: Employee) => void;
   logout: () => void;
   updateEmployee: (updates: Partial<Employee>) => void;
 }
@@ -32,13 +33,11 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       isAuthenticated: false,
       employee: null,
-      accessToken: null,
 
-      login: (employee, token) => {
+      login: (employee) => {
         set({
           isAuthenticated: true,
           employee,
-          accessToken: token,
         });
       },
 
@@ -46,7 +45,6 @@ export const useAuthStore = create<AuthState>()(
         set({
           isAuthenticated: false,
           employee: null,
-          accessToken: null,
         });
       },
 
@@ -61,7 +59,6 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,
         employee: state.employee,
-        accessToken: state.accessToken,
       }),
     }
   )

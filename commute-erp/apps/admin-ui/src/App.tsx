@@ -50,6 +50,35 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <HashRouter>
+        {/* Toast 알림 - Router 내부에 배치 */}
+        <Toaster
+          position="top-right"
+          containerStyle={{
+            top: 80,
+          }}
+          toastOptions={{
+            duration: 3000,
+            style: {
+              background: '#1e293b',
+              color: '#fff',
+              borderRadius: '12px',
+              padding: '12px 16px',
+            },
+            success: {
+              iconTheme: {
+                primary: '#22c55e',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
+        
         <Routes>
           {/* 로그인 페이지 */}
           <Route path="/login" element={<LoginPage />} />
@@ -92,32 +121,6 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </HashRouter>
-
-      {/* Toast 알림 */}
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#1e293b',
-            color: '#fff',
-            borderRadius: '12px',
-            padding: '12px 16px',
-          },
-          success: {
-            iconTheme: {
-              primary: '#22c55e',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-          },
-        }}
-      />
     </QueryClientProvider>
   );
 }

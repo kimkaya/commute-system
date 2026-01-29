@@ -1,125 +1,174 @@
 // =====================================================
-// 스케줄 관리 페이지
+// 스케줄 관리 페이지 (API 연동)
 // =====================================================
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
-  Calendar,
   ChevronLeft,
   ChevronRight,
-  Plus,
-  Users,
-  Clock,
   Sun,
   Moon,
   X,
   Copy,
-  Trash2,
-  Edit2,
+  Loader2,
+  AlertCircle,
+  Clock,
+  Coffee,
 } from 'lucide-react';
 import {
   format,
-  startOfMonth,
-  endOfMonth,
   startOfWeek,
   endOfWeek,
   eachDayOfInterval,
-  isSameMonth,
   isToday,
-  isSameDay,
-  addMonths,
-  subMonths,
+  addWeeks,
+  subWeeks,
 } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import {
+  getEmployees,
+  getSchedules,
+  createSchedule,
+} from '../../lib/api';
+import type { Employee, Schedule } from '../../lib/api';
 
 // 근무 유형
 const shiftTypes = [
-  { id: 'day', label: '주간', time: '09:00-18:00', color: 'bg-blue-500', icon: Sun },
-  { id: 'night', label: '야간', time: '18:00-03:00', color: 'bg-purple-500', icon: Moon },
+  { id: 'full', label: '주간', time: '09:00-18:00', color: 'bg-blue-500', icon: Sun },
   { id: 'morning', label: '오전', time: '06:00-14:00', color: 'bg-cyan-500', icon: Sun },
-  { id: 'afternoon', label: '오후', time: '14:00-22:00', color: 'bg-orange-500', icon: Moon },
+  { id: 'afternoon', label: '오후', time: '14:00-22:00', color: 'bg-orange-500', icon: Coffee },
+  { id: 'night', label: '야간', time: '22:00-06:00', color: 'bg-purple-500', icon: Moon },
   { id: 'off', label: '휴무', time: '-', color: 'bg-gray-400', icon: Clock },
 ];
 
-// 직원 목록
-const employees = [
-  { id: '1', name: '홍길동', department: '개발팀', position: '선임' },
-  { id: '2', name: '김영희', department: '영업팀', position: '대리' },
-  { id: '3', name: '박철수', department: '개발팀', position: '주임' },
-  { id: '4', name: '이민수', department: '인사팀', position: '과장' },
-  { id: '5', name: '최지영', department: '마케팅팀', position: '사원' },
-];
-
-// 데모 스케줄 데이터
-const generateMockSchedules = () => {
-  const schedules: Record<string, Record<string, string>> = {};
-  const today = new Date();
-  const start = startOfMonth(today);
-  const end = endOfMonth(today);
-  const days = eachDayOfInterval({ start, end });
-
-  employees.forEach((emp) => {
-    schedules[emp.id] = {};
-    days.forEach((day) => {
-      const dayOfWeek = day.getDay();
-      if (dayOfWeek === 0 || dayOfWeek === 6) {
-        schedules[emp.id][format(day, 'yyyy-MM-dd')] = 'off';
-      } else {
-        schedules[emp.id][format(day, 'yyyy-MM-dd')] = 'day';
-      }
-    });
-  });
-
-  return schedules;
+// shift 타입 매핑
+const shiftTimeMap: Record<string, { start: string; end: string; break: number }> = {
+  full: { start: '09:00', end: '18:00', break: 60 },
+  morning: { start: '06:00', end: '14:00', break: 30 },
+  afternoon: { start: '14:00', end: '22:00', break: 30 },
+  night: { start: '22:00', end: '06:00', break: 30 },
+  off: { start: '', end: '', break: 0 },
 };
 
 export function SchedulePage() {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [schedules, setSchedules] = useState(generateMockSchedules);
+  const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [schedules, setSchedules] = useState<Record<string, Record<string, string>>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
   const [selectedCell, setSelectedCell] = useState<{
     employeeId: string;
     date: string;
   } | null>(null);
+  
+  // 일괄 적용 모달
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
-  const [bulkShift, setBulkShift] = useState('day');
+  const [bulkShift, setBulkShift] = useState('full');
   const [bulkStartDate, setBulkStartDate] = useState('');
   const [bulkEndDate, setBulkEndDate] = useState('');
 
-  // 현재 월의 날짜들
-  const calendarDays = useMemo(() => {
-    const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
-    const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 });
-    return eachDayOfInterval({ start, end });
-  }, [currentMonth]);
-
-  // 이번 주 날짜만 (간단 뷰)
+  // 이번 주 날짜
   const weekDays = useMemo(() => {
-    const start = startOfWeek(new Date(), { weekStartsOn: 1 });
-    const end = endOfWeek(new Date(), { weekStartsOn: 1 });
+    const start = startOfWeek(currentWeek, { weekStartsOn: 1 });
+    const end = endOfWeek(currentWeek, { weekStartsOn: 1 });
     return eachDayOfInterval({ start, end });
-  }, []);
+  }, [currentWeek]);
 
-  // 월 이동
-  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
-  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  // 데이터 로드
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // 직원 목록 로드
+      const emps = await getEmployees({ is_active: true });
+      setEmployees(emps);
+      
+      // 스케줄 로드
+      const startDate = format(weekDays[0], 'yyyy-MM-dd');
+      const endDate = format(weekDays[weekDays.length - 1], 'yyyy-MM-dd');
+      const scheds = await getSchedules({ start_date: startDate, end_date: endDate });
+      
+      // 스케줄 데이터 변환 (employeeId -> date -> shift)
+      const scheduleMap: Record<string, Record<string, string>> = {};
+      
+      // 기본값 설정 (주말은 휴무, 평일은 주간)
+      emps.forEach(emp => {
+        scheduleMap[emp.id] = {};
+        weekDays.forEach(day => {
+          const dateStr = format(day, 'yyyy-MM-dd');
+          const dayOfWeek = day.getDay();
+          scheduleMap[emp.id][dateStr] = (dayOfWeek === 0 || dayOfWeek === 6) ? 'off' : 'full';
+        });
+      });
+      
+      // DB에서 가져온 스케줄 적용
+      scheds.forEach((sched: Schedule) => {
+        if (scheduleMap[sched.employee_id]) {
+          scheduleMap[sched.employee_id][sched.date] = sched.shift;
+        }
+      });
+      
+      setSchedules(scheduleMap);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+      setError('데이터를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [weekDays]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // 주 이동
+  const prevWeek = () => setCurrentWeek(subWeeks(currentWeek, 1));
+  const nextWeek = () => setCurrentWeek(addWeeks(currentWeek, 1));
+  const goToToday = () => setCurrentWeek(new Date());
 
   // 스케줄 변경
-  const handleShiftChange = (employeeId: string, date: string, shiftId: string) => {
-    setSchedules((prev) => ({
-      ...prev,
-      [employeeId]: {
-        ...prev[employeeId],
-        [date]: shiftId,
-      },
-    }));
-    setSelectedCell(null);
-    toast.success('스케줄이 변경되었습니다');
+  const handleShiftChange = async (employeeId: string, date: string, shiftId: string) => {
+    setIsSaving(true);
+    
+    try {
+      const shiftInfo = shiftTimeMap[shiftId];
+      
+      await createSchedule({
+        employee_id: employeeId,
+        date,
+        shift: shiftId as Schedule['shift'],
+        start_time: shiftInfo.start || null,
+        end_time: shiftInfo.end || null,
+        break_duration: shiftInfo.break,
+        status: 'scheduled',
+      });
+      
+      // 로컬 상태 업데이트
+      setSchedules(prev => ({
+        ...prev,
+        [employeeId]: {
+          ...prev[employeeId],
+          [date]: shiftId,
+        },
+      }));
+      
+      setSelectedCell(null);
+      toast.success('스케줄이 변경되었습니다');
+    } catch (err) {
+      console.error('Failed to update schedule:', err);
+      toast.error('스케줄 변경에 실패했습니다');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // 일괄 적용
-  const handleBulkApply = () => {
+  const handleBulkApply = async () => {
     if (selectedEmployees.length === 0) {
       toast.error('직원을 선택해주세요');
       return;
@@ -129,43 +178,88 @@ export function SchedulePage() {
       return;
     }
 
-    const start = new Date(bulkStartDate);
-    const end = new Date(bulkEndDate);
-    const days = eachDayOfInterval({ start, end });
+    setIsSaving(true);
+    
+    try {
+      const start = new Date(bulkStartDate);
+      const end = new Date(bulkEndDate);
+      const days = eachDayOfInterval({ start, end });
+      const shiftInfo = shiftTimeMap[bulkShift];
 
-    setSchedules((prev) => {
-      const newSchedules = { ...prev };
-      selectedEmployees.forEach((empId) => {
-        days.forEach((day) => {
-          const dateStr = format(day, 'yyyy-MM-dd');
-          if (!newSchedules[empId]) {
-            newSchedules[empId] = {};
-          }
-          newSchedules[empId][dateStr] = bulkShift;
+      // 모든 스케줄 저장
+      const promises: Promise<Schedule>[] = [];
+      
+      for (const empId of selectedEmployees) {
+        for (const day of days) {
+          promises.push(
+            createSchedule({
+              employee_id: empId,
+              date: format(day, 'yyyy-MM-dd'),
+              shift: bulkShift as Schedule['shift'],
+              start_time: shiftInfo.start || null,
+              end_time: shiftInfo.end || null,
+              break_duration: shiftInfo.break,
+              status: 'scheduled',
+            })
+          );
+        }
+      }
+      
+      await Promise.all(promises);
+
+      // 로컬 상태 업데이트
+      setSchedules(prev => {
+        const newSchedules = { ...prev };
+        selectedEmployees.forEach(empId => {
+          days.forEach(day => {
+            const dateStr = format(day, 'yyyy-MM-dd');
+            if (!newSchedules[empId]) {
+              newSchedules[empId] = {};
+            }
+            newSchedules[empId][dateStr] = bulkShift;
+          });
         });
+        return newSchedules;
       });
-      return newSchedules;
-    });
 
-    toast.success(`${selectedEmployees.length}명의 스케줄이 일괄 적용되었습니다`);
-    setShowBulkModal(false);
-    setSelectedEmployees([]);
-    setBulkStartDate('');
-    setBulkEndDate('');
+      toast.success(`${selectedEmployees.length}명의 스케줄이 일괄 적용되었습니다`);
+      setShowBulkModal(false);
+      setSelectedEmployees([]);
+      setBulkStartDate('');
+      setBulkEndDate('');
+    } catch (err) {
+      console.error('Failed to bulk apply:', err);
+      toast.error('일괄 적용에 실패했습니다');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // 이번 주 통계
   const weekStats = useMemo(() => {
-    const stats = { day: 0, night: 0, morning: 0, afternoon: 0, off: 0 };
-    employees.forEach((emp) => {
-      weekDays.forEach((day) => {
+    const stats = { full: 0, night: 0, morning: 0, afternoon: 0, off: 0 };
+    employees.forEach(emp => {
+      weekDays.forEach(day => {
         const dateStr = format(day, 'yyyy-MM-dd');
-        const shift = schedules[emp.id]?.[dateStr] || 'day';
-        stats[shift as keyof typeof stats]++;
+        const shift = schedules[emp.id]?.[dateStr] || 'full';
+        if (stats[shift as keyof typeof stats] !== undefined) {
+          stats[shift as keyof typeof stats]++;
+        }
       });
     });
     return stats;
-  }, [schedules, weekDays]);
+  }, [schedules, weekDays, employees]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 size={32} className="animate-spin text-primary-500" />
+          <p className="text-gray-500">스케줄을 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -176,7 +270,11 @@ export function SchedulePage() {
           <p className="text-gray-500 mt-1">직원들의 근무 스케줄을 관리합니다</p>
         </div>
         <button
-          onClick={() => setShowBulkModal(true)}
+          onClick={() => {
+            setShowBulkModal(true);
+            setBulkStartDate(format(weekDays[0], 'yyyy-MM-dd'));
+            setBulkEndDate(format(weekDays[weekDays.length - 1], 'yyyy-MM-dd'));
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Copy size={18} />
@@ -184,9 +282,17 @@ export function SchedulePage() {
         </button>
       </div>
 
+      {/* 에러 메시지 */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
+          <AlertCircle size={18} />
+          {error}
+        </div>
+      )}
+
       {/* 이번 주 통계 */}
       <div className="grid grid-cols-5 gap-4">
-        {shiftTypes.map((shift) => {
+        {shiftTypes.map(shift => {
           const Icon = shift.icon;
           return (
             <div
@@ -202,7 +308,7 @@ export function SchedulePage() {
                 <span className="text-sm font-medium text-gray-700">{shift.label}</span>
               </div>
               <p className="text-2xl font-bold text-gray-900">
-                {weekStats[shift.id as keyof typeof weekStats]}
+                {weekStats[shift.id as keyof typeof weekStats] || 0}
               </p>
               <p className="text-xs text-gray-500">이번 주 배정</p>
             </div>
@@ -210,28 +316,35 @@ export function SchedulePage() {
         })}
       </div>
 
-      {/* 캘린더 헤더 */}
+      {/* 캘린더 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-4">
             <button
-              onClick={prevMonth}
+              onClick={prevWeek}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <ChevronLeft size={20} />
             </button>
             <h2 className="text-lg font-semibold text-gray-900">
-              {format(currentMonth, 'yyyy년 M월', { locale: ko })}
+              {format(weekDays[0], 'yyyy년 M월 d일', { locale: ko })} ~{' '}
+              {format(weekDays[weekDays.length - 1], 'M월 d일', { locale: ko })}
             </h2>
             <button
-              onClick={nextMonth}
+              onClick={nextWeek}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <ChevronRight size={20} />
             </button>
+            <button
+              onClick={goToToday}
+              className="px-3 py-1 text-sm text-primary-600 hover:bg-primary-50 rounded-lg"
+            >
+              오늘
+            </button>
           </div>
           <div className="flex items-center gap-2">
-            {shiftTypes.map((shift) => (
+            {shiftTypes.map(shift => (
               <div key={shift.id} className="flex items-center gap-1 text-xs">
                 <div className={`w-3 h-3 ${shift.color} rounded`} />
                 <span className="text-gray-600">{shift.label}</span>
@@ -242,13 +355,13 @@ export function SchedulePage() {
 
         {/* 스케줄 테이블 */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px]">
+          <table className="w-full min-w-[900px]">
             <thead>
               <tr className="bg-gray-50">
-                <th className="sticky left-0 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-700 w-40 border-r border-gray-200">
+                <th className="sticky left-0 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-700 w-48 border-r border-gray-200 z-10">
                   직원
                 </th>
-                {weekDays.map((day) => (
+                {weekDays.map(day => (
                   <th
                     key={day.toISOString()}
                     className={`px-2 py-3 text-center text-sm font-medium min-w-[100px] ${
@@ -268,76 +381,89 @@ export function SchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {employees.map((employee) => (
-                <tr key={employee.id} className="border-t border-gray-100">
-                  <td className="sticky left-0 bg-white px-4 py-3 border-r border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-medium text-gray-600">
-                          {employee.name.charAt(0)}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {employee.name}
-                        </p>
-                        <p className="text-xs text-gray-500">{employee.department}</p>
-                      </div>
-                    </div>
+              {employees.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                    등록된 직원이 없습니다
                   </td>
-                  {weekDays.map((day) => {
-                    const dateStr = format(day, 'yyyy-MM-dd');
-                    const shiftId = schedules[employee.id]?.[dateStr] || 'day';
-                    const shift = shiftTypes.find((s) => s.id === shiftId);
-                    const isSelected =
-                      selectedCell?.employeeId === employee.id &&
-                      selectedCell?.date === dateStr;
-
-                    return (
-                      <td
-                        key={dateStr}
-                        className={`px-2 py-2 text-center relative ${
-                          isToday(day) ? 'bg-primary-50' : ''
-                        }`}
-                      >
-                        <button
-                          onClick={() =>
-                            setSelectedCell(
-                              isSelected ? null : { employeeId: employee.id, date: dateStr }
-                            )
-                          }
-                          className={`w-full py-2 px-3 rounded-lg text-xs font-medium text-white transition-all ${
-                            shift?.color || 'bg-gray-400'
-                          } hover:opacity-80 ${isSelected ? 'ring-2 ring-primary-500' : ''}`}
-                        >
-                          {shift?.label}
-                          <div className="text-[10px] opacity-80">{shift?.time}</div>
-                        </button>
-
-                        {/* 드롭다운 */}
-                        {isSelected && (
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-10 py-1 min-w-[120px]">
-                            {shiftTypes.map((s) => (
-                              <button
-                                key={s.id}
-                                onClick={() =>
-                                  handleShiftChange(employee.id, dateStr, s.id)
-                                }
-                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
-                                  s.id === shiftId ? 'bg-gray-50' : ''
-                                }`}
-                              >
-                                <div className={`w-3 h-3 ${s.color} rounded`} />
-                                <span>{s.label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
                 </tr>
-              ))}
+              ) : (
+                employees.map(employee => (
+                  <tr key={employee.id} className="border-t border-gray-100">
+                    <td className="sticky left-0 bg-white px-4 py-3 border-r border-gray-200 z-10">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-gray-600">
+                            {employee.name.charAt(0)}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {employee.name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {employee.department || '-'}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    {weekDays.map(day => {
+                      const dateStr = format(day, 'yyyy-MM-dd');
+                      const shiftId = schedules[employee.id]?.[dateStr] || 'full';
+                      const shift = shiftTypes.find(s => s.id === shiftId);
+                      const isSelected =
+                        selectedCell?.employeeId === employee.id &&
+                        selectedCell?.date === dateStr;
+
+                      return (
+                        <td
+                          key={dateStr}
+                          className={`px-2 py-2 text-center relative ${
+                            isToday(day) ? 'bg-primary-50' : ''
+                          }`}
+                        >
+                          <button
+                            onClick={() =>
+                              setSelectedCell(
+                                isSelected ? null : { employeeId: employee.id, date: dateStr }
+                              )
+                            }
+                            disabled={isSaving}
+                            className={`w-full py-2 px-3 rounded-lg text-xs font-medium text-white transition-all ${
+                              shift?.color || 'bg-gray-400'
+                            } hover:opacity-80 ${isSelected ? 'ring-2 ring-primary-500' : ''} ${
+                              isSaving ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            {shift?.label}
+                            <div className="text-[10px] opacity-80">{shift?.time}</div>
+                          </button>
+
+                          {/* 드롭다운 */}
+                          {isSelected && !isSaving && (
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1 min-w-[120px]">
+                              {shiftTypes.map(s => (
+                                <button
+                                  key={s.id}
+                                  onClick={() =>
+                                    handleShiftChange(employee.id, dateStr, s.id)
+                                  }
+                                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                                    s.id === shiftId ? 'bg-gray-50' : ''
+                                  }`}
+                                >
+                                  <div className={`w-3 h-3 ${s.color} rounded`} />
+                                  <span>{s.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -364,7 +490,7 @@ export function SchedulePage() {
                   직원 선택
                 </label>
                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                  {employees.map((emp) => (
+                  {employees.map(emp => (
                     <label
                       key={emp.id}
                       className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
@@ -376,12 +502,12 @@ export function SchedulePage() {
                       <input
                         type="checkbox"
                         checked={selectedEmployees.includes(emp.id)}
-                        onChange={(e) => {
+                        onChange={e => {
                           if (e.target.checked) {
                             setSelectedEmployees([...selectedEmployees, emp.id]);
                           } else {
                             setSelectedEmployees(
-                              selectedEmployees.filter((id) => id !== emp.id)
+                              selectedEmployees.filter(id => id !== emp.id)
                             );
                           }
                         }}
@@ -396,7 +522,7 @@ export function SchedulePage() {
                     setSelectedEmployees(
                       selectedEmployees.length === employees.length
                         ? []
-                        : employees.map((e) => e.id)
+                        : employees.map(e => e.id)
                     )
                   }
                   className="text-xs text-primary-600 mt-2"
@@ -413,7 +539,7 @@ export function SchedulePage() {
                   근무 유형
                 </label>
                 <div className="grid grid-cols-5 gap-2">
-                  {shiftTypes.map((shift) => (
+                  {shiftTypes.map(shift => (
                     <button
                       key={shift.id}
                       onClick={() => setBulkShift(shift.id)}
@@ -436,7 +562,7 @@ export function SchedulePage() {
                   <input
                     type="date"
                     value={bulkStartDate}
-                    onChange={(e) => setBulkStartDate(e.target.value)}
+                    onChange={e => setBulkStartDate(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
@@ -447,7 +573,7 @@ export function SchedulePage() {
                   <input
                     type="date"
                     value={bulkEndDate}
-                    onChange={(e) => setBulkEndDate(e.target.value)}
+                    onChange={e => setBulkEndDate(e.target.value)}
                     min={bulkStartDate}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
@@ -464,8 +590,10 @@ export function SchedulePage() {
               </button>
               <button
                 onClick={handleBulkApply}
-                className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                disabled={isSaving}
+                className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
+                {isSaving && <Loader2 size={16} className="animate-spin" />}
                 적용하기
               </button>
             </div>

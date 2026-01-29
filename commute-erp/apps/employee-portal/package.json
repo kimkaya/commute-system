@@ -29,22 +29,27 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "signAndEditExecutable": false
     }
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.93.2",
+    "@tanstack/react-query": "^5.60.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "jspdf": "^4.0.0",
+    "jspdf-autotable": "^5.0.7",
+    "lucide-react": "^0.460.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.0.0",
-    "@tanstack/react-query": "^5.60.0",
-    "zustand": "^5.0.0",
     "react-hot-toast": "^2.4.1",
-    "date-fns": "^4.1.0",
-    "lucide-react": "^0.460.0",
-    "clsx": "^2.1.1"
+    "react-router-dom": "^7.0.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

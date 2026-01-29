@@ -2,7 +2,7 @@
 // 휴가 신청/조회 페이지
 // =====================================================
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   CalendarDays,
   Plus,
@@ -13,11 +13,14 @@ import {
   ChevronRight,
   X,
   Calendar,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
-import { format, differenceInDays, addDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../stores/authStore';
+import { getMyLeaves, getLeaveBalance, requestLeave, cancelLeave, type Leave } from '../../lib/api';
 
 // 휴가 유형
 const leaveTypes = [
@@ -29,68 +32,11 @@ const leaveTypes = [
   { id: 'official', label: '공가', color: 'green' },
 ];
 
-// 휴가 잔여 현황
-const leaveBalance = {
-  annual: { total: 15, used: 8, remaining: 7 },
-  sick: { total: 3, used: 1, remaining: 2 },
+// 휴가 유형 라벨 변환
+const getLeaveTypeLabel = (type: string) => {
+  const found = leaveTypes.find(t => t.id === type);
+  return found?.label || type;
 };
-
-// 데모 휴가 신청 내역
-const mockLeaveRequests = [
-  {
-    id: '1',
-    type: 'annual',
-    typeLabel: '연차',
-    startDate: '2024-02-15',
-    endDate: '2024-02-16',
-    days: 2,
-    reason: '개인 사유',
-    status: 'approved',
-    approver: '김부장',
-    approvedAt: '2024-02-01',
-    createdAt: '2024-01-28',
-  },
-  {
-    id: '2',
-    type: 'half_am',
-    typeLabel: '오전반차',
-    startDate: '2024-02-20',
-    endDate: '2024-02-20',
-    days: 0.5,
-    reason: '병원 진료',
-    status: 'pending',
-    approver: null,
-    approvedAt: null,
-    createdAt: '2024-02-05',
-  },
-  {
-    id: '3',
-    type: 'annual',
-    typeLabel: '연차',
-    startDate: '2024-01-08',
-    endDate: '2024-01-08',
-    days: 1,
-    reason: '개인 사유',
-    status: 'approved',
-    approver: '김부장',
-    approvedAt: '2024-01-05',
-    createdAt: '2024-01-03',
-  },
-  {
-    id: '4',
-    type: 'annual',
-    typeLabel: '연차',
-    startDate: '2024-01-02',
-    endDate: '2024-01-05',
-    days: 4,
-    reason: '가족여행',
-    status: 'rejected',
-    approver: '김부장',
-    approvedAt: '2023-12-28',
-    rejectReason: '연초 업무로 인해 휴가 사용 불가',
-    createdAt: '2023-12-25',
-  },
-];
 
 type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
@@ -131,9 +77,57 @@ export function MyLeavePage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
+  
+  // API 데이터
+  const [leaves, setLeaves] = useState<Leave[]>([]);
+  const [leaveBalance, setLeaveBalanceData] = useState({
+    annual: { total: 15, used: 0, remaining: 15 },
+    sick: { total: 3, used: 0, remaining: 3 },
+  });
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // 데이터 로드
+  const loadData = useCallback(async () => {
+    if (!employee?.id) return;
+    
+    setLoading(true);
+    try {
+      const currentYear = new Date().getFullYear();
+      const [leavesData, balanceData] = await Promise.all([
+        getMyLeaves(employee.id, { year: currentYear }),
+        getLeaveBalance(employee.id, currentYear),
+      ]);
+
+      setLeaves(leavesData);
+      setLeaveBalanceData({
+        annual: {
+          total: balanceData.annual_total,
+          used: balanceData.annual_used,
+          remaining: balanceData.annual_remaining,
+        },
+        sick: {
+          total: balanceData.sick_total || 3,
+          used: balanceData.sick_used,
+          remaining: (balanceData.sick_total || 3) - balanceData.sick_used,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to load leave data:', error);
+      toast.error('휴가 정보를 불러오는데 실패했습니다');
+    } finally {
+      setLoading(false);
+    }
+  }, [employee?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!employee?.id) return;
 
     if (!startDate) {
       toast.error('시작일을 선택해주세요');
@@ -148,13 +142,42 @@ export function MyLeavePage() {
       return;
     }
 
-    // TODO: API 연동
-    toast.success('휴가가 신청되었습니다');
-    setShowModal(false);
-    setSelectedType('annual');
-    setStartDate('');
-    setEndDate('');
-    setReason('');
+    setSubmitting(true);
+    try {
+      await requestLeave(employee.id, {
+        type: selectedType,
+        start_date: startDate,
+        end_date: endDate,
+        reason: reason.trim(),
+        duration: calculateDays(),
+      });
+
+      toast.success('휴가가 신청되었습니다');
+      setShowModal(false);
+      setSelectedType('annual');
+      setStartDate('');
+      setEndDate('');
+      setReason('');
+      loadData(); // 목록 새로고침
+    } catch (error) {
+      console.error('Failed to request leave:', error);
+      toast.error('휴가 신청에 실패했습니다');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelLeave = async (leaveId: string) => {
+    if (!confirm('휴가 신청을 취소하시겠습니까?')) return;
+
+    try {
+      await cancelLeave(leaveId);
+      toast.success('휴가 신청이 취소되었습니다');
+      loadData();
+    } catch (error) {
+      console.error('Failed to cancel leave:', error);
+      toast.error('휴가 취소에 실패했습니다');
+    }
   };
 
   const calculateDays = () => {
@@ -165,6 +188,14 @@ export function MyLeavePage() {
     }
     return days;
   };
+
+  if (loading) {
+    return (
+      <div className="py-4 flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="animate-spin text-primary-600" size={32} />
+      </div>
+    );
+  }
 
   return (
     <div className="py-4 space-y-4">
@@ -236,50 +267,77 @@ export function MyLeavePage() {
 
       {/* 휴가 신청 내역 */}
       <div className="bg-white rounded-2xl p-5 shadow-sm">
-        <h3 className="font-semibold text-gray-900 mb-3">신청 내역</h3>
-        <div className="space-y-3">
-          {mockLeaveRequests.map((request) => (
-            <div
-              key={request.id}
-              className="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    statusConfig[request.status as LeaveStatus].bgColor
-                  }`}
-                >
-                  <Calendar
-                    size={18}
-                    className={statusConfig[request.status as LeaveStatus].color}
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">
-                      {request.typeLabel}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
-                        statusConfig[request.status as LeaveStatus].bgColor
-                      } ${statusConfig[request.status as LeaveStatus].color}`}
-                    >
-                      {statusConfig[request.status as LeaveStatus].icon}
-                      {statusConfig[request.status as LeaveStatus].label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {format(new Date(request.startDate), 'M.d', { locale: ko })}
-                    {request.startDate !== request.endDate &&
-                      ` ~ ${format(new Date(request.endDate), 'M.d', { locale: ko })}`}
-                    {' '}({request.days}일)
-                  </p>
-                </div>
-              </div>
-              <ChevronRight size={18} className="text-gray-400" />
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">신청 내역</h3>
+          <button
+            onClick={loadData}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <RefreshCw size={16} className="text-gray-500" />
+          </button>
         </div>
+        {leaves.length === 0 ? (
+          <div className="py-8 text-center text-gray-500">
+            <Calendar size={32} className="mx-auto mb-2 text-gray-300" />
+            <p className="text-sm">휴가 신청 내역이 없습니다</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {leaves.map((leave) => (
+              <div
+                key={leave.id}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      statusConfig[leave.status as LeaveStatus].bgColor
+                    }`}
+                  >
+                    <Calendar
+                      size={18}
+                      className={statusConfig[leave.status as LeaveStatus].color}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">
+                        {getLeaveTypeLabel(leave.type)}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                          statusConfig[leave.status as LeaveStatus].bgColor
+                        } ${statusConfig[leave.status as LeaveStatus].color}`}
+                      >
+                        {statusConfig[leave.status as LeaveStatus].icon}
+                        {statusConfig[leave.status as LeaveStatus].label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {format(new Date(leave.start_date), 'M.d', { locale: ko })}
+                      {leave.start_date !== leave.end_date &&
+                        ` ~ ${format(new Date(leave.end_date), 'M.d', { locale: ko })}`}
+                      {' '}({leave.duration}일)
+                    </p>
+                    {leave.review_notes && (
+                      <p className="text-xs text-red-500 mt-1">{leave.review_notes}</p>
+                    )}
+                  </div>
+                </div>
+                {leave.status === 'pending' ? (
+                  <button
+                    onClick={() => handleCancelLeave(leave.id)}
+                    className="text-xs text-red-500 hover:text-red-700 px-2 py-1"
+                  >
+                    취소
+                  </button>
+                ) : (
+                  <ChevronRight size={18} className="text-gray-400" />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 휴가 정책 안내 */}

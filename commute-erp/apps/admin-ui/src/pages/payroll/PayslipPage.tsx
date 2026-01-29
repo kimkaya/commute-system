@@ -2,7 +2,7 @@
 // 급여명세서 페이지
 // =====================================================
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
 import {
@@ -15,15 +15,34 @@ import {
   Calendar,
   Clock,
   DollarSign,
+  Loader2,
+  AlertCircle,
+  Edit3,
+  Save,
+  X,
 } from 'lucide-react';
+import {
+  getEmployee,
+  getPayrollPeriods,
+  getPayrollLines,
+  getAttendanceRecords,
+  updatePayrollLine,
+} from '../../lib/api';
+import type {
+  Employee,
+  PayrollLine,
+  AttendanceRecord,
+} from '../../lib/api';
 
 interface PayslipData {
   employee: {
+    id: string;
     name: string;
     employeeNumber: string;
     department: string;
     position: string;
     hireDate: string;
+    hourlyRate: number;
   };
   period: {
     year: number;
@@ -63,61 +82,160 @@ interface PayslipData {
     total: number;
   };
   netPay: number;
+  status: 'draft' | 'confirmed' | 'paid';
+  payrollLineId: string | null;
 }
-
-// 데모 데이터
-const demoPayslip: PayslipData = {
-  employee: {
-    name: '김철수',
-    employeeNumber: 'EMP001',
-    department: '개발팀',
-    position: '선임',
-    hireDate: '2023-03-15',
-  },
-  period: {
-    year: 2025,
-    month: 1,
-    startDate: '2025-01-01',
-    endDate: '2025-01-31',
-  },
-  workSummary: {
-    workDays: 22,
-    totalHours: 184,
-    regularHours: 176,
-    overtimeHours: 8,
-    nightHours: 0,
-    holidayHours: 0,
-    lateCount: 1,
-    earlyLeaveCount: 0,
-  },
-  earnings: {
-    basePay: 2640000,
-    overtimePay: 180000,
-    nightPay: 0,
-    holidayPay: 0,
-    bonus: 0,
-    transportation: 100000,
-    meal: 100000,
-    other: 0,
-    total: 3020000,
-  },
-  deductions: {
-    incomeTax: 121000,
-    localTax: 12100,
-    nationalPension: 135900,
-    healthInsurance: 107059,
-    longTermCare: 13864,
-    employmentInsurance: 27180,
-    other: 0,
-    total: 417103,
-  },
-  netPay: 2602897,
-};
 
 export function PayslipPage() {
   const { year, month, employeeId } = useParams();
-  const [payslip] = useState<PayslipData>(demoPayslip);
+  const [payslip, setPayslip] = useState<PayslipData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    basePay: 0,
+    overtimePay: 0,
+  });
   const printRef = useRef<HTMLDivElement>(null);
+
+  const loadPayslipData = useCallback(async () => {
+    if (!year || !month || !employeeId) return;
+    
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const yearNum = parseInt(year);
+      const monthNum = parseInt(month);
+
+      // 직원 정보 조회
+      const employee = await getEmployee(employeeId);
+      if (!employee) {
+        setError('직원을 찾을 수 없습니다.');
+        return;
+      }
+
+      // 급여 기간 조회
+      const periods = await getPayrollPeriods();
+      const currentPeriod = periods.find(
+        (p) => p.year === yearNum && p.month === monthNum
+      );
+
+      // 기간 시작/종료일 계산
+      const startDate = new Date(yearNum, monthNum - 1, 1);
+      const endDate = new Date(yearNum, monthNum, 0);
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+
+      // 출퇴근 기록 조회 (지각/조퇴 계산용)
+      const attendanceRecords = await getAttendanceRecords({
+        employee_id: employeeId,
+        start_date: startDateStr,
+        end_date: endDateStr,
+      });
+
+      // 지각/조퇴 계산 (09:00 기준)
+      let lateCount = 0;
+      let earlyLeaveCount = 0;
+      for (const record of attendanceRecords) {
+        if (record.check_in) {
+          const [h, m] = record.check_in.split(':').map(Number);
+          if (h > 9 || (h === 9 && m > 0)) lateCount++;
+        }
+        if (record.check_out) {
+          const [h, m] = record.check_out.split(':').map(Number);
+          if (h < 18) earlyLeaveCount++;
+        }
+      }
+
+      // 급여 라인 조회
+      let payrollLine: PayrollLine | null = null;
+      if (currentPeriod) {
+        const lines = await getPayrollLines(currentPeriod.id);
+        payrollLine = lines.find((l) => l.employee_id === employeeId) || null;
+      }
+
+      // 급여 계산 (급여 라인이 있으면 사용, 없으면 기본값)
+      const grossPay = payrollLine?.gross_pay || 0;
+      const totalDeductions = payrollLine?.total_deductions || 0;
+      
+      // 공제 항목 추정 (총 공제액 기준 비율)
+      const incomeTax = Math.round(grossPay * 0.04);
+      const localTax = Math.round(incomeTax * 0.1);
+      const nationalPension = Math.round(grossPay * 0.045);
+      const healthInsurance = Math.round(grossPay * 0.03545);
+      const longTermCare = Math.round(healthInsurance * 0.1295);
+      const employmentInsurance = Math.round(grossPay * 0.009);
+
+      const payslipData: PayslipData = {
+        employee: {
+          id: employee.id,
+          name: employee.name,
+          employeeNumber: employee.employee_number || '-',
+          department: employee.department || '-',
+          position: employee.position || '-',
+          hireDate: employee.hire_date || '-',
+          hourlyRate: employee.hourly_rate || 0,
+        },
+        period: {
+          year: yearNum,
+          month: monthNum,
+          startDate: startDateStr,
+          endDate: endDateStr,
+        },
+        workSummary: {
+          workDays: payrollLine?.work_days || 0,
+          totalHours: payrollLine?.total_hours || 0,
+          regularHours: payrollLine?.regular_hours || 0,
+          overtimeHours: payrollLine?.overtime_hours || 0,
+          nightHours: 0,
+          holidayHours: 0,
+          lateCount,
+          earlyLeaveCount,
+        },
+        earnings: {
+          basePay: payrollLine?.base_pay || 0,
+          overtimePay: payrollLine?.overtime_pay || 0,
+          nightPay: 0,
+          holidayPay: 0,
+          bonus: 0,
+          transportation: 0,
+          meal: 0,
+          other: 0,
+          total: grossPay,
+        },
+        deductions: {
+          incomeTax,
+          localTax,
+          nationalPension,
+          healthInsurance,
+          longTermCare,
+          employmentInsurance,
+          other: Math.max(0, totalDeductions - (incomeTax + localTax + nationalPension + healthInsurance + longTermCare + employmentInsurance)),
+          total: totalDeductions,
+        },
+        netPay: payrollLine?.net_pay || 0,
+        status: payrollLine?.status || 'draft',
+        payrollLineId: payrollLine?.id || null,
+      };
+
+      setPayslip(payslipData);
+      setEditForm({
+        basePay: payslipData.earnings.basePay,
+        overtimePay: payslipData.earnings.overtimePay,
+      });
+    } catch (err) {
+      console.error('Failed to load payslip:', err);
+      setError('급여명세서를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [year, month, employeeId]);
+
+  useEffect(() => {
+    loadPayslipData();
+  }, [loadPayslipData]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ko-KR').format(amount);
@@ -126,6 +244,74 @@ export function PayslipPage() {
   const handlePrint = () => {
     window.print();
   };
+
+  const handleSave = async () => {
+    if (!payslip?.payrollLineId) return;
+    
+    setIsSaving(true);
+    try {
+      const grossPay = editForm.basePay + editForm.overtimePay;
+      const totalDeductions = Math.round(grossPay * 0.13); // 약 13% 공제
+      const netPay = grossPay - totalDeductions;
+
+      await updatePayrollLine(payslip.payrollLineId, {
+        base_pay: editForm.basePay,
+        overtime_pay: editForm.overtimePay,
+        gross_pay: grossPay,
+        total_deductions: totalDeductions,
+        net_pay: netPay,
+      });
+
+      await loadPayslipData();
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Failed to save:', err);
+      setError('저장에 실패했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDownloadPdf = () => {
+    // 인쇄 기능으로 PDF 저장 안내
+    alert('인쇄 대화상자에서 "PDF로 저장"을 선택하세요.');
+    window.print();
+  };
+
+  if (isLoading) {
+    return (
+      <div>
+        <Header title="급여명세서" subtitle="로딩 중..." />
+        <div className="mt-16 flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 size={48} className="animate-spin text-primary-500" />
+            <p className="text-gray-500">급여명세서를 불러오는 중...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !payslip) {
+    return (
+      <div>
+        <Header title="급여명세서" subtitle="오류" />
+        <div className="mt-16">
+          <div className="flex items-center justify-between mb-6">
+            <Link to="/payroll" className="btn btn-secondary">
+              <ArrowLeft size={18} />
+              목록으로
+            </Link>
+          </div>
+          <div className="card p-8 text-center">
+            <AlertCircle size={48} className="mx-auto text-danger-500 mb-4" />
+            <p className="text-gray-700 font-medium">{error || '데이터를 찾을 수 없습니다.'}</p>
+            <p className="text-gray-500 text-sm mt-2">해당 기간의 급여가 계산되지 않았을 수 있습니다.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -142,11 +328,49 @@ export function PayslipPage() {
             목록으로
           </Link>
           <div className="flex items-center gap-3">
-            <button className="btn btn-secondary">
+            {/* 상태 표시 */}
+            <span className={`badge ${
+              payslip.status === 'draft' ? 'badge-gray' : 
+              payslip.status === 'confirmed' ? 'badge-success' : 
+              'bg-primary-50 text-primary-600'
+            }`}>
+              {payslip.status === 'draft' ? '임시' : payslip.status === 'confirmed' ? '확정' : '지급완료'}
+            </span>
+            
+            {/* 수정 버튼 (draft 상태일 때만) */}
+            {payslip.status === 'draft' && payslip.payrollLineId && (
+              isEditing ? (
+                <>
+                  <button 
+                    onClick={() => setIsEditing(false)} 
+                    className="btn btn-secondary"
+                    disabled={isSaving}
+                  >
+                    <X size={18} />
+                    취소
+                  </button>
+                  <button 
+                    onClick={handleSave} 
+                    className="btn btn-primary"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                    저장
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setIsEditing(true)} className="btn btn-secondary">
+                  <Edit3 size={18} />
+                  수정
+                </button>
+              )
+            )}
+            
+            <button className="btn btn-secondary" disabled>
               <Mail size={18} />
               이메일 발송
             </button>
-            <button className="btn btn-secondary">
+            <button onClick={handleDownloadPdf} className="btn btn-secondary">
               <Download size={18} />
               PDF 다운로드
             </button>
@@ -235,20 +459,39 @@ export function PayslipPage() {
                 <div className="flex items-center gap-2 text-success-600 mb-4">
                   <DollarSign size={18} />
                   <span className="font-semibold">지급 내역</span>
+                  {isEditing && <span className="text-xs text-gray-500">(수정 중)</span>}
                 </div>
                 <div className="bg-gray-50 rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <tbody className="divide-y divide-gray-200">
-                      <tr>
+                      <tr className={isEditing ? 'bg-warning-50' : ''}>
                         <td className="px-4 py-2.5 text-gray-600">기본급</td>
                         <td className="px-4 py-2.5 text-right font-medium">
-                          {formatCurrency(payslip.earnings.basePay)}원
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              value={editForm.basePay}
+                              onChange={(e) => setEditForm({ ...editForm, basePay: parseInt(e.target.value) || 0 })}
+                              className="w-32 px-2 py-1 text-right border border-gray-300 rounded"
+                            />
+                          ) : (
+                            <>{formatCurrency(payslip.earnings.basePay)}원</>
+                          )}
                         </td>
                       </tr>
-                      <tr>
+                      <tr className={isEditing ? 'bg-warning-50' : ''}>
                         <td className="px-4 py-2.5 text-gray-600">연장근무수당</td>
                         <td className="px-4 py-2.5 text-right">
-                          {formatCurrency(payslip.earnings.overtimePay)}원
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              value={editForm.overtimePay}
+                              onChange={(e) => setEditForm({ ...editForm, overtimePay: parseInt(e.target.value) || 0 })}
+                              className="w-32 px-2 py-1 text-right border border-gray-300 rounded"
+                            />
+                          ) : (
+                            <>{formatCurrency(payslip.earnings.overtimePay)}원</>
+                          )}
                         </td>
                       </tr>
                       <tr>
@@ -294,7 +537,10 @@ export function PayslipPage() {
                           지급액 계
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-success-700">
-                          {formatCurrency(payslip.earnings.total)}원
+                          {isEditing 
+                            ? formatCurrency(editForm.basePay + editForm.overtimePay)
+                            : formatCurrency(payslip.earnings.total)
+                          }원
                         </td>
                       </tr>
                     </tfoot>

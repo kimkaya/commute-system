@@ -2,7 +2,7 @@
 // 급여 관리 페이지
 // =====================================================
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
 import {
@@ -17,19 +17,30 @@ import {
   Users,
   DollarSign,
   TrendingUp,
+  CreditCard,
+  Loader2,
+  FileSpreadsheet,
+  X,
 } from 'lucide-react';
-
-interface PayrollPeriod {
-  id: string;
-  year: number;
-  month: number;
-  status: 'open' | 'processing' | 'closed';
-  employeeCount: number;
-  totalGross: number;
-  totalDeductions: number;
-  totalNet: number;
-  closedAt?: string;
-}
+import {
+  getPayrollPeriods,
+  getPayrollLines,
+  runPayroll,
+  confirmPayroll,
+  markPayrollAsPaid,
+  getExcelTemplates,
+  generateDefaultPayrollExcel,
+  generateWithholdingExcel,
+  generateInsuranceReportExcel,
+  downloadPayslipExcel,
+  downloadPayslipsZip,
+  convertPayrollToExcelData,
+} from '../../lib/api';
+import type {
+  PayrollPeriod,
+  PayrollLine as ApiPayrollLine,
+  ExcelTemplate,
+} from '../../lib/api';
 
 interface PayrollLine {
   id: string;
@@ -50,106 +61,86 @@ interface PayrollLine {
   status: 'draft' | 'confirmed' | 'paid';
 }
 
-// 데모 데이터
-const demoPayrollLines: PayrollLine[] = [
-  {
-    id: '1',
-    employeeId: '1',
-    employeeName: '김철수',
-    employeeNumber: 'EMP001',
-    department: '개발팀',
-    workDays: 22,
-    totalHours: 184,
-    regularHours: 176,
-    overtimeHours: 8,
-    basePay: 2640000,
-    overtimePay: 180000,
-    totalAllowances: 200000,
-    grossPay: 3020000,
-    totalDeductions: 302000,
-    netPay: 2718000,
-    status: 'draft',
-  },
-  {
-    id: '2',
-    employeeId: '2',
-    employeeName: '이영희',
-    employeeNumber: 'EMP002',
-    department: '디자인팀',
-    workDays: 20,
-    totalHours: 160,
-    regularHours: 160,
-    overtimeHours: 0,
-    basePay: 1920000,
-    overtimePay: 0,
-    totalAllowances: 150000,
-    grossPay: 2070000,
-    totalDeductions: 207000,
-    netPay: 1863000,
-    status: 'draft',
-  },
-  {
-    id: '3',
-    employeeId: '3',
-    employeeName: '박지성',
-    employeeNumber: 'EMP003',
-    department: '영업팀',
-    workDays: 21,
-    totalHours: 180,
-    regularHours: 168,
-    overtimeHours: 12,
-    basePay: 2352000,
-    overtimePay: 252000,
-    totalAllowances: 300000,
-    grossPay: 2904000,
-    totalDeductions: 290400,
-    netPay: 2613600,
-    status: 'draft',
-  },
-  {
-    id: '4',
-    employeeId: '4',
-    employeeName: '최민수',
-    employeeNumber: 'EMP004',
-    department: '개발팀',
-    workDays: 22,
-    totalHours: 176,
-    regularHours: 176,
-    overtimeHours: 0,
-    basePay: 1760000,
-    overtimePay: 0,
-    totalAllowances: 100000,
-    grossPay: 1860000,
-    totalDeductions: 186000,
-    netPay: 1674000,
-    status: 'draft',
-  },
-  {
-    id: '5',
-    employeeId: '5',
-    employeeName: '정유진',
-    employeeNumber: 'EMP005',
-    department: '인사팀',
-    workDays: 18,
-    totalHours: 144,
-    regularHours: 144,
-    overtimeHours: 0,
-    basePay: 2592000,
-    overtimePay: 0,
-    totalAllowances: 250000,
-    grossPay: 2842000,
-    totalDeductions: 284200,
-    netPay: 2557800,
-    status: 'draft',
-  },
-];
-
 export function PayrollListPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [payrollLines, setPayrollLines] = useState<PayrollLine[]>(demoPayrollLines);
+  const [payrollLines, setPayrollLines] = useState<PayrollLine[]>([]);
+  const [rawPayrollLines, setRawPayrollLines] = useState<ApiPayrollLine[]>([]); // API 원본 데이터
   const [isCalculating, setIsCalculating] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [periodStatus, setPeriodStatus] = useState<'open' | 'processing' | 'closed'>('open');
+  const [currentPeriodId, setCurrentPeriodId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  
+  // 세금 서류 다운로드 모달
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [excelTemplates, setExcelTemplates] = useState<ExcelTemplate[]>([]);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // API에서 급여 데이터 로드
+  const loadPayrollData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // 급여 기간 목록 조회
+      const periods = await getPayrollPeriods();
+      const currentPeriod = periods.find(
+        (p) => p.year === selectedYear && p.month === selectedMonth
+      );
+
+      if (currentPeriod) {
+        setCurrentPeriodId(currentPeriod.id);
+        setPeriodStatus(currentPeriod.status);
+
+        // 해당 기간의 급여 라인 조회
+        const lines = await getPayrollLines(currentPeriod.id);
+        setRawPayrollLines(lines); // 원본 데이터 저장
+        const mappedLines: PayrollLine[] = lines.map((line: ApiPayrollLine) => ({
+          id: line.id,
+          employeeId: line.employee_id,
+          employeeName: line.employee?.name || '알 수 없음',
+          employeeNumber: line.employee?.employee_number || '-',
+          department: line.employee?.department || '-',
+          workDays: line.work_days,
+          totalHours: line.total_hours,
+          regularHours: line.regular_hours,
+          overtimeHours: line.overtime_hours,
+          basePay: line.base_pay,
+          overtimePay: line.overtime_pay,
+          totalAllowances: 0, // 추후 수당 필드 추가 시 수정
+          grossPay: line.gross_pay,
+          totalDeductions: line.total_deductions,
+          netPay: line.net_pay,
+          status: line.status,
+        }));
+        setPayrollLines(mappedLines);
+      } else {
+        // 해당 기간의 급여 데이터 없음
+        setCurrentPeriodId(null);
+        setPeriodStatus('open');
+        setPayrollLines([]);
+        setRawPayrollLines([]);
+      }
+    } catch (err) {
+      console.error('Failed to load payroll data:', err);
+      setError('급여 데이터를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedYear, selectedMonth]);
+
+  // 템플릿 목록 로드
+  const loadTemplates = useCallback(() => {
+    const templates = getExcelTemplates();
+    setExcelTemplates(templates);
+  }, []);
+
+  useEffect(() => {
+    loadPayrollData();
+    loadTemplates();
+  }, [loadPayrollData, loadTemplates]);
 
   // 통계 계산
   const stats = useMemo(() => {
@@ -189,17 +180,157 @@ export function PayrollListPage() {
 
   const handleCalculatePayroll = async () => {
     setIsCalculating(true);
-    // TODO: 실제 급여 계산 API 호출
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setIsCalculating(false);
-    setPeriodStatus('processing');
+    setError(null);
+    try {
+      const result = await runPayroll(selectedYear, selectedMonth);
+      if (result.success) {
+        await loadPayrollData();
+      } else {
+        setError(result.error || '급여 계산에 실패했습니다.');
+      }
+    } catch (err) {
+      console.error('Payroll calculation error:', err);
+      setError('급여 계산 중 오류가 발생했습니다.');
+    } finally {
+      setIsCalculating(false);
+    }
   };
 
-  const handleClosePayroll = async () => {
-    if (!confirm('급여를 마감하시겠습니까? 마감 후에는 수정할 수 없습니다.')) return;
+  const handleConfirmPayroll = async () => {
+    if (!currentPeriodId) return;
+    if (!confirm('급여를 확정하시겠습니까? 확정 후에는 수정할 수 없습니다.')) return;
     
-    // TODO: 급여 마감 API 호출
-    setPeriodStatus('closed');
+    setIsConfirming(true);
+    setError(null);
+    try {
+      const result = await confirmPayroll(currentPeriodId);
+      if (result.success) {
+        await loadPayrollData();
+      } else {
+        setError(result.error || '급여 확정에 실패했습니다.');
+      }
+    } catch (err) {
+      console.error('Payroll confirm error:', err);
+      setError('급여 확정 중 오류가 발생했습니다.');
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!currentPeriodId) return;
+    if (!confirm('급여를 지급 완료 처리하시겠습니까?')) return;
+    
+    setIsPaying(true);
+    setError(null);
+    try {
+      const result = await markPayrollAsPaid(currentPeriodId);
+      if (result.success) {
+        await loadPayrollData();
+      } else {
+        setError(result.error || '지급 처리에 실패했습니다.');
+      }
+    } catch (err) {
+      console.error('Mark as paid error:', err);
+      setError('지급 처리 중 오류가 발생했습니다.');
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    // CSV 형태로 내보내기
+    const headers = ['사번', '이름', '부서', '근무일', '총시간', '정규', '연장', '기본급', '연장수당', '총지급액', '공제액', '실수령액', '상태'];
+    const rows = payrollLines.map(line => [
+      line.employeeNumber,
+      line.employeeName,
+      line.department,
+      line.workDays,
+      line.totalHours,
+      line.regularHours,
+      line.overtimeHours,
+      line.basePay,
+      line.overtimePay,
+      line.grossPay,
+      line.totalDeductions,
+      line.netPay,
+      line.status === 'draft' ? '임시' : line.status === 'confirmed' ? '확정' : '지급완료',
+    ]);
+    
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `급여내역_${selectedYear}년${selectedMonth}월.csv`;
+    link.click();
+  };
+
+  // 세금 서류 다운로드 모달 열기
+  const handleOpenDownloadModal = () => {
+    loadTemplates();
+    setShowDownloadModal(true);
+  };
+
+  // 기본 급여대장 Excel 다운로드
+  const handleDownloadPayrollExcel = () => {
+    setIsDownloading(true);
+    try {
+      generateDefaultPayrollExcel(rawPayrollLines, selectedYear, selectedMonth);
+    } catch (err) {
+      console.error('Excel download error:', err);
+      setError('Excel 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // 원천징수영수증 다운로드
+  const handleDownloadWithholding = () => {
+    setIsDownloading(true);
+    try {
+      generateWithholdingExcel(rawPayrollLines, selectedYear);
+    } catch (err) {
+      console.error('Withholding excel error:', err);
+      setError('원천징수영수증 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // 4대보험 신고자료 다운로드
+  const handleDownloadInsurance = () => {
+    setIsDownloading(true);
+    try {
+      generateInsuranceReportExcel(rawPayrollLines, selectedYear, selectedMonth);
+    } catch (err) {
+      console.error('Insurance report error:', err);
+      setError('4대보험 신고자료 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // 커스텀 템플릿으로 전체 급여명세서 다운로드
+  const handleDownloadWithTemplate = async (template: ExcelTemplate) => {
+    setIsDownloading(true);
+    try {
+      const payrollDataList = rawPayrollLines.map(line => 
+        convertPayrollToExcelData(line, selectedYear, selectedMonth)
+      );
+      
+      if (payrollDataList.length === 1) {
+        // 단일 직원
+        downloadPayslipExcel(template, payrollDataList[0]);
+      } else {
+        // 여러 직원 - ZIP으로 다운로드
+        await downloadPayslipsZip(template, payrollDataList);
+      }
+    } catch (err) {
+      console.error('Template download error:', err);
+      setError('템플릿 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const getStatusBadge = (status: PayrollLine['status']) => {
@@ -242,32 +373,61 @@ export function PayrollListPage() {
 
             {/* 기간 상태 */}
             <div className="flex items-center gap-2">
-              {periodStatus === 'open' && (
+              {isLoading && (
+                <span className="badge bg-gray-100 text-gray-600">
+                  <Loader2 size={12} className="mr-1 animate-spin" />
+                  로딩 중
+                </span>
+              )}
+              {!isLoading && periodStatus === 'open' && payrollLines.length === 0 && (
+                <span className="badge bg-gray-100 text-gray-600">
+                  <Clock size={12} className="mr-1" />
+                  미계산
+                </span>
+              )}
+              {!isLoading && periodStatus === 'open' && payrollLines.length > 0 && (
                 <span className="badge bg-primary-50 text-primary-600">
                   <Clock size={12} className="mr-1" />
                   진행중
                 </span>
               )}
-              {periodStatus === 'processing' && (
+              {!isLoading && periodStatus === 'processing' && (
                 <span className="badge badge-warning">
                   <AlertCircle size={12} className="mr-1" />
-                  계산완료 (미마감)
+                  계산완료 (미확정)
                 </span>
               )}
-              {periodStatus === 'closed' && (
-                <span className="badge badge-success">
-                  <CheckCircle size={12} className="mr-1" />
-                  마감완료
-                </span>
+              {!isLoading && (periodStatus === 'closed' || payrollLines.every(l => l.status === 'confirmed' || l.status === 'paid')) && payrollLines.length > 0 && (
+                <>
+                  {payrollLines.every(l => l.status === 'paid') ? (
+                    <span className="badge badge-success">
+                      <CreditCard size={12} className="mr-1" />
+                      지급완료
+                    </span>
+                  ) : (
+                    <span className="badge badge-success">
+                      <CheckCircle size={12} className="mr-1" />
+                      확정완료
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
 
           {/* 액션 버튼 */}
           <div className="flex items-center gap-3">
-            <button className="btn btn-secondary">
+            <button 
+              onClick={handleOpenDownloadModal} 
+              className="btn btn-secondary" 
+              disabled={payrollLines.length === 0}
+            >
+              <FileSpreadsheet size={18} />
+              세금 서류
+            </button>
+            <button onClick={handleExportExcel} className="btn btn-secondary" disabled={payrollLines.length === 0}>
               <Download size={18} />
-              엑셀 다운로드
+              CSV
             </button>
             {periodStatus === 'open' && (
               <button
@@ -275,14 +435,39 @@ export function PayrollListPage() {
                 disabled={isCalculating}
                 className="btn btn-primary"
               >
-                <Calculator size={18} />
+                {isCalculating ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />}
                 {isCalculating ? '계산 중...' : '급여 계산'}
               </button>
             )}
-            {periodStatus === 'processing' && (
-              <button onClick={handleClosePayroll} className="btn btn-primary">
-                <CheckCircle size={18} />
-                급여 마감
+            {periodStatus === 'processing' && payrollLines.some(l => l.status === 'draft') && (
+              <>
+                <button
+                  onClick={handleCalculatePayroll}
+                  disabled={isCalculating}
+                  className="btn btn-secondary"
+                >
+                  {isCalculating ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />}
+                  재계산
+                </button>
+                <button 
+                  onClick={handleConfirmPayroll} 
+                  disabled={isConfirming}
+                  className="btn btn-primary"
+                >
+                  {isConfirming ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle size={18} />}
+                  급여 확정
+                </button>
+              </>
+            )}
+            {(periodStatus === 'closed' || payrollLines.every(l => l.status === 'confirmed')) && 
+             payrollLines.length > 0 && payrollLines.some(l => l.status === 'confirmed') && (
+              <button 
+                onClick={handleMarkAsPaid} 
+                disabled={isPaying}
+                className="btn btn-primary"
+              >
+                {isPaying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
+                지급 완료
               </button>
             )}
           </div>
@@ -341,6 +526,16 @@ export function PayrollListPage() {
           </div>
         </div>
 
+        {/* 에러 메시지 */}
+        {error && (
+          <div className="mb-6 p-4 bg-danger-50 border border-danger-200 rounded-lg text-danger-700">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} />
+              <span>{error}</span>
+            </div>
+          </div>
+        )}
+
         {/* 급여 테이블 */}
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
@@ -386,7 +581,27 @@ export function PayrollListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {payrollLines.map((line) => (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={12} className="px-4 py-12 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 size={32} className="animate-spin text-primary-500" />
+                        <p className="text-gray-500">급여 데이터를 불러오는 중...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : payrollLines.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="px-4 py-12 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <Calculator size={48} className="text-gray-300" />
+                        <p className="text-gray-500 font-medium">{selectedYear}년 {selectedMonth}월 급여 데이터가 없습니다</p>
+                        <p className="text-gray-400 text-sm">위의 '급여 계산' 버튼을 클릭하여 급여를 계산하세요</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  payrollLines.map((line) => (
                   <tr key={line.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <div>
@@ -460,38 +675,167 @@ export function PayrollListPage() {
                       </Link>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
-              <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-                <tr>
-                  <td colSpan={4} className="px-4 py-3 text-sm font-semibold text-gray-900">
-                    합계
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                    {formatCurrency(payrollLines.reduce((s, l) => s + l.basePay, 0))}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-semibold text-warning-600">
-                    {formatCurrency(payrollLines.reduce((s, l) => s + l.overtimePay, 0))}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                    {formatCurrency(payrollLines.reduce((s, l) => s + l.totalAllowances, 0))}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
-                    {formatCurrency(stats.totalGross)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-semibold text-danger-500">
-                    -{formatCurrency(stats.totalDeductions)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">
-                    {formatCurrency(stats.totalNet)}
-                  </td>
-                  <td colSpan={2}></td>
-                </tr>
-              </tfoot>
+              {payrollLines.length > 0 && (
+                <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                  <tr>
+                    <td colSpan={4} className="px-4 py-3 text-sm font-semibold text-gray-900">
+                      합계
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                      {formatCurrency(payrollLines.reduce((s, l) => s + l.basePay, 0))}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-warning-600">
+                      {formatCurrency(payrollLines.reduce((s, l) => s + l.overtimePay, 0))}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                      {formatCurrency(payrollLines.reduce((s, l) => s + l.totalAllowances, 0))}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                      {formatCurrency(stats.totalGross)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-danger-500">
+                      -{formatCurrency(stats.totalDeductions)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">
+                      {formatCurrency(stats.totalNet)}
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
       </div>
+
+      {/* 세금 서류 다운로드 모달 */}
+      {showDownloadModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            {/* 배경 오버레이 */}
+            <div 
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => setShowDownloadModal(false)}
+            />
+            
+            {/* 모달 컨텐츠 */}
+            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg p-6 z-10">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">세금 서류 다운로드</h2>
+                <button 
+                  onClick={() => setShowDownloadModal(false)}
+                  className="btn btn-ghost btn-sm"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* 기본 서류 */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">기본 서류</h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={handleDownloadPayrollExcel}
+                      disabled={isDownloading}
+                      className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileSpreadsheet className="text-green-600" size={24} />
+                        <div className="text-left">
+                          <p className="font-medium text-gray-900">급여대장</p>
+                          <p className="text-sm text-gray-500">{selectedYear}년 {selectedMonth}월 전체 직원 급여 내역</p>
+                        </div>
+                      </div>
+                      <Download size={18} className="text-gray-400" />
+                    </button>
+
+                    <button
+                      onClick={handleDownloadWithholding}
+                      disabled={isDownloading}
+                      className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="text-blue-600" size={24} />
+                        <div className="text-left">
+                          <p className="font-medium text-gray-900">원천징수영수증</p>
+                          <p className="text-sm text-gray-500">{selectedYear}년 소득세 원천징수 내역</p>
+                        </div>
+                      </div>
+                      <Download size={18} className="text-gray-400" />
+                    </button>
+
+                    <button
+                      onClick={handleDownloadInsurance}
+                      disabled={isDownloading}
+                      className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="text-purple-600" size={24} />
+                        <div className="text-left">
+                          <p className="font-medium text-gray-900">4대보험 신고자료</p>
+                          <p className="text-sm text-gray-500">{selectedYear}년 {selectedMonth}월 4대보험 내역</p>
+                        </div>
+                      </div>
+                      <Download size={18} className="text-gray-400" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 커스텀 템플릿 */}
+                {excelTemplates.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">내 템플릿</h3>
+                    <div className="space-y-2">
+                      {excelTemplates.map(template => (
+                        <button
+                          key={template.id}
+                          onClick={() => handleDownloadWithTemplate(template)}
+                          disabled={isDownloading}
+                          className="w-full flex items-center justify-between p-4 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FileSpreadsheet className="text-primary-600" size={24} />
+                            <div className="text-left">
+                              <p className="font-medium text-gray-900">{template.name}</p>
+                              <p className="text-sm text-gray-500">{template.description || template.fileName}</p>
+                            </div>
+                          </div>
+                          <Download size={18} className="text-primary-400" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {excelTemplates.length === 0 && (
+                  <div className="p-4 bg-gray-50 rounded-lg text-center">
+                    <p className="text-sm text-gray-500">
+                      등록된 커스텀 템플릿이 없습니다.
+                    </p>
+                    <Link 
+                      to="/settings" 
+                      className="text-sm text-primary-600 hover:underline mt-1 inline-block"
+                    >
+                      설정 → Excel 템플릿에서 등록하세요
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {isDownloading && (
+                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-500">
+                  <Loader2 size={16} className="animate-spin" />
+                  다운로드 준비 중...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

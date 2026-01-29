@@ -19,23 +19,3 @@ export const supabase: SupabaseClient = createClient(
     },
   }
 );
-
-// Edge Function 호출 헬퍼
-export async function invokeFunction<T = unknown>(
-  functionName: string,
-  body?: Record<string, unknown>
-): Promise<{ data: T | null; error: Error | null }> {
-  try {
-    const { data, error } = await supabase.functions.invoke(functionName, {
-      body,
-    });
-
-    if (error) {
-      return { data: null, error: new Error(error.message) };
-    }
-
-    return { data: data as T, error: null };
-  } catch (err) {
-    return { data: null, error: err as Error };
-  }
-}
