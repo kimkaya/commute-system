@@ -479,3 +479,48 @@ export async function createInquiry(inquiry: Inquiry): Promise<{
     return { success: false, error: '문의 접수 중 오류가 발생했습니다.' };
   }
 }
+
+// =====================================================
+// 알림 API
+// =====================================================
+
+export interface Notification {
+  id: string;
+  business_id: string;
+  recipient_id: string | null;
+  type: string;
+  title: string;
+  message: string;
+  data?: any;
+  priority: string;
+  status: string;
+  channel: string;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+export async function getMyNotifications(employeeId: string): Promise<Notification[]> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('business_id', BUSINESS_ID)
+    .or(`recipient_id.eq.${employeeId},recipient_id.is.null`)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function markNotificationAsRead(notificationId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ 
+      is_read: true, 
+      read_at: new Date().toISOString() 
+    })
+    .eq('id', notificationId);
+
+  if (error) throw error;
+}
