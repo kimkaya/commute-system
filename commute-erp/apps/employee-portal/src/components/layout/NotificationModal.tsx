@@ -2,7 +2,7 @@
 // 알림 모달 컴포넌트
 // =====================================================
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Bell, X, Check } from 'lucide-react';
 
 interface Notification {
@@ -60,6 +60,20 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
+  // ESC 키로 모달 닫기
+  React.useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -70,12 +84,15 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
       <div 
         className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="notification-modal-title"
       >
         {/* 헤더 */}
         <div className="flex items-center justify-between p-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Bell size={20} className="text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-900">알림</h3>
+            <h3 id="notification-modal-title" className="text-lg font-semibold text-gray-900">알림</h3>
             {unreadCount > 0 && (
               <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
                 {unreadCount}
@@ -85,6 +102,7 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="알림 닫기"
           >
             <X size={20} className="text-gray-500" />
           </button>
@@ -139,6 +157,7 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
                           <button
                             onClick={() => handleMarkAsRead(notification.id)}
                             className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
+                            aria-label={`'${notification.title}' 읽음 처리`}
                           >
                             <Check size={14} />
                             읽음
