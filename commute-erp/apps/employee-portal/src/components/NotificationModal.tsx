@@ -44,7 +44,8 @@ export function NotificationModal({ isOpen, onClose, employeeId }: NotificationM
       setNotifications(data);
     } catch (error) {
       console.error('Failed to load notifications:', error);
-      toast.error('알림을 불러오는데 실패했습니다');
+      // Don't show error toast, just set empty notifications
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
