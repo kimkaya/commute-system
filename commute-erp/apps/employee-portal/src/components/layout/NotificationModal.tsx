@@ -63,8 +63,14 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center sm:items-center">
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+    <div 
+      className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center sm:items-center"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* 헤더 */}
         <div className="flex items-center justify-between p-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
