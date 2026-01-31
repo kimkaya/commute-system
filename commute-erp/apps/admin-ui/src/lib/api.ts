@@ -484,6 +484,104 @@ export async function rejectLeave(id: string, reviewNotes?: string): Promise<Lea
   });
 }
 
+// 휴가 잔여 조회
+export interface LeaveBalance {
+  employee_id: string;
+  year: number;
+  annual_total: number;
+  annual_used: number;
+  annual_remaining: number;
+  sick_total: number;
+  sick_used: number;
+  employee?: Employee;
+}
+
+export async function getLeaveBalances(year: number): Promise<LeaveBalance[]> {
+  try {
+    // leave_balances 테이블 조회
+    const { data: balances, error } = await supabase
+      .from('leave_balances')
+      .select('*')
+      .eq('business_id', BUSINESS_ID)
+      .eq('year', year);
+
+    if (error) {
+      console.error('Failed to load leave balances:', error);
+      // 테이블이 없거나 오류 시, 직원 목록 기반으로 기본값 생성
+      const employees = await getEmployees({ is_active: true });
+      return employees.map(emp => ({
+        employee_id: emp.id,
+        year,
+        annual_total: 15,
+        annual_used: 0,
+        annual_remaining: 15,
+        sick_total: 0,
+        sick_used: 0,
+        employee: emp,
+      }));
+    }
+
+    // 직원 정보 조회
+    const employeeIds = [...new Set((balances || []).map(b => b.employee_id))];
+    let employees: Employee[] = [];
+    if (employeeIds.length > 0) {
+      const { data: empData } = await supabase
+        .from('employees')
+        .select('*')
+        .in('id', employeeIds);
+      employees = empData || [];
+    }
+
+    const employeeMap = new Map(employees.map(e => [e.id, e]));
+    
+    return (balances || []).map(b => ({
+      employee_id: b.employee_id,
+      year: b.year,
+      annual_total: b.annual_total || 15,
+      annual_used: b.annual_used || 0,
+      annual_remaining: (b.annual_total || 15) - (b.annual_used || 0),
+      sick_total: b.sick_total || 0,
+      sick_used: b.sick_used || 0,
+      employee: employeeMap.get(b.employee_id),
+    }));
+  } catch (err) {
+    console.error('Failed to load leave balances:', err);
+    return [];
+  }
+}
+
+export async function getEmployeeLeaveBalance(employeeId: string, year: number): Promise<LeaveBalance> {
+  // 해당 직원의 승인된 휴가 일수 합산
+  const { data: leaves } = await supabase
+    .from('leaves')
+    .select('type, duration, status')
+    .eq('employee_id', employeeId)
+    .eq('status', 'approved')
+    .gte('start_date', `${year}-01-01`)
+    .lte('end_date', `${year}-12-31`);
+
+  let annualUsed = 0;
+  let sickUsed = 0;
+  
+  (leaves || []).forEach(leave => {
+    if (leave.type === 'annual' || leave.type === 'half_am' || leave.type === 'half_pm') {
+      annualUsed += leave.duration || 0;
+    } else if (leave.type === 'sick') {
+      sickUsed += leave.duration || 0;
+    }
+  });
+
+  return {
+    employee_id: employeeId,
+    year,
+    annual_total: 15, // 기본 연차
+    annual_used: annualUsed,
+    annual_remaining: 15 - annualUsed,
+    sick_total: 0,
+    sick_used: sickUsed,
+  };
+}
+
 // =====================================================
 // 급여 API
 // =====================================================

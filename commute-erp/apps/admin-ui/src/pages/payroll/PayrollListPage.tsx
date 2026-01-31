@@ -22,6 +22,8 @@ import {
   FileSpreadsheet,
   X,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 import {
   getPayrollPeriods,
   getPayrollLines,
@@ -575,8 +577,8 @@ export function PayrollListPage() {
                   <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
                     상태
                   </th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                    명세서
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
+                    명세서 뽑기
                   </th>
                 </tr>
               </thead>
@@ -665,14 +667,79 @@ export function PayrollListPage() {
                     <td className="px-4 py-3 text-center">
                       {getStatusBadge(line.status)}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        to={`/payroll/${selectedYear}/${selectedMonth}/${line.employeeId}`}
-                        className="btn btn-ghost btn-sm"
-                        title="급여명세서"
-                      >
-                        <FileText size={16} />
-                      </Link>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Link
+                          to={`/payroll/${selectedYear}/${selectedMonth}/${line.employeeId}`}
+                          className="btn btn-ghost btn-sm"
+                          title="급여명세서 보기"
+                        >
+                          <FileText size={16} />
+                        </Link>
+                        <button
+                          onClick={() => {
+                            const rawLine = rawPayrollLines.find(r => r.id === line.id);
+                            if (rawLine) {
+                              const payrollData = convertPayrollToExcelData(rawLine, selectedYear, selectedMonth);
+                              // 기본 템플릿으로 Excel 다운로드
+                              const worksheet = {
+                                '!ref': 'A1:H20',
+                                'A1': { t: 's', v: '급 여 명 세 서' },
+                                'A3': { t: 's', v: '지급년월' },
+                                'B3': { t: 's', v: `${selectedYear}년 ${selectedMonth}월` },
+                                'D3': { t: 's', v: '성명' },
+                                'E3': { t: 's', v: payrollData.employeeName },
+                                'G3': { t: 's', v: '사번' },
+                                'H3': { t: 's', v: payrollData.employeeNumber },
+                                'A5': { t: 's', v: '부서' },
+                                'B5': { t: 's', v: payrollData.department },
+                                'D5': { t: 's', v: '직급' },
+                                'E5': { t: 's', v: payrollData.position },
+                                'A7': { t: 's', v: '[ 지급 내역 ]' },
+                                'A8': { t: 's', v: '기본급' },
+                                'B8': { t: 'n', v: payrollData.basePay },
+                                'A9': { t: 's', v: '연장수당' },
+                                'B9': { t: 'n', v: payrollData.overtimePay },
+                                'A10': { t: 's', v: '총지급액' },
+                                'B10': { t: 'n', v: payrollData.grossPay },
+                                'D7': { t: 's', v: '[ 공제 내역 ]' },
+                                'D8': { t: 's', v: '소득세' },
+                                'E8': { t: 'n', v: payrollData.incomeTax },
+                                'D9': { t: 's', v: '지방소득세' },
+                                'E9': { t: 'n', v: payrollData.localTax },
+                                'D10': { t: 's', v: '국민연금' },
+                                'E10': { t: 'n', v: payrollData.nationalPension },
+                                'D11': { t: 's', v: '건강보험' },
+                                'E11': { t: 'n', v: payrollData.healthInsurance },
+                                'D12': { t: 's', v: '공제합계' },
+                                'E12': { t: 'n', v: payrollData.totalDeductions },
+                                'A14': { t: 's', v: '실수령액' },
+                                'B14': { t: 'n', v: payrollData.netPay },
+                              };
+                              const workbook = XLSX.utils.book_new();
+                              const ws = worksheet as XLSX.WorkSheet;
+                              // 셀 병합 설정
+                              ws['!merges'] = [
+                                { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }, // 제목 병합
+                              ];
+                              // 열 너비 설정
+                              ws['!cols'] = [
+                                { wch: 12 }, { wch: 15 }, { wch: 5 },
+                                { wch: 12 }, { wch: 15 }, { wch: 5 },
+                                { wch: 10 }, { wch: 12 }
+                              ];
+                              XLSX.utils.book_append_sheet(workbook, ws, '급여명세서');
+                              const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+                              const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                              saveAs(blob, `급여명세서_${payrollData.employeeName}_${selectedYear}년${selectedMonth}월.xlsx`);
+                            }
+                          }}
+                          className="btn btn-ghost btn-sm text-green-600 hover:text-green-700 hover:bg-green-50"
+                          title="Excel 다운로드"
+                        >
+                          <Download size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   ))

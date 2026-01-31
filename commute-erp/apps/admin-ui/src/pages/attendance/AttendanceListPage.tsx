@@ -18,10 +18,14 @@ import {
   LogIn,
   LogOut,
   Plus,
+  CalendarDays,
+  LayoutGrid,
 } from 'lucide-react';
 import { getAttendanceRecords, getEmployees, updateAttendance, checkIn, checkOut } from '../../lib/api';
 import type { AttendanceRecord, Employee } from '../../lib/api';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
@@ -41,7 +45,9 @@ function calculateWorkMinutes(checkInTime: string | null, checkOutTime: string |
 
 export function AttendanceListPage() {
   const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<'day' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
@@ -49,10 +55,21 @@ export function AttendanceListPage() {
   const [showManualCheckIn, setShowManualCheckIn] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
 
-  // 출퇴근 기록 조회
+  // 출퇴근 기록 조회 (일별/월별)
   const { data: records, isLoading } = useQuery({
-    queryKey: ['attendance', selectedDate],
-    queryFn: () => getAttendanceRecords({ date: selectedDate }),
+    queryKey: ['attendance', viewMode === 'day' ? selectedDate : selectedMonth, viewMode],
+    queryFn: () => {
+      if (viewMode === 'day') {
+        return getAttendanceRecords({ date: selectedDate });
+      } else {
+        // 월별 조회
+        const [year, month] = selectedMonth.split('-');
+        const startDate = `${year}-${month}-01`;
+        const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+        const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+        return getAttendanceRecords({ start_date: startDate, end_date: endDate });
+      }
+    },
   });
 
   // 직원 목록
@@ -131,9 +148,15 @@ export function AttendanceListPage() {
   }, [records, employees]);
 
   const handleDateChange = (days: number) => {
-    const date = new Date(selectedDate);
-    date.setDate(date.getDate() + days);
-    setSelectedDate(date.toISOString().split('T')[0]);
+    if (viewMode === 'day') {
+      const date = new Date(selectedDate);
+      date.setDate(date.getDate() + days);
+      setSelectedDate(date.toISOString().split('T')[0]);
+    } else {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const date = new Date(year, month - 1 + days, 1);
+      setSelectedMonth(date.toISOString().slice(0, 7));
+    }
   };
 
   const handleEdit = (record: AttendanceRecord) => {
@@ -159,6 +182,52 @@ export function AttendanceListPage() {
 
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
 
+  // 엑셀 다운로드
+  const handleExportExcel = () => {
+    if (!filteredRecords || filteredRecords.length === 0) {
+      toast.error('다운로드할 데이터가 없습니다');
+      return;
+    }
+
+    const headers = ['날짜', '사번', '이름', '부서', '출근시간', '퇴근시간', '근무시간', '인증방법', '비고'];
+    const rows = filteredRecords.map(record => {
+      const workMinutes = calculateWorkMinutes(record.check_in, record.check_out);
+      return [
+        record.date,
+        record.employee?.employee_number || '-',
+        record.employee?.name || '알 수 없음',
+        record.employee?.department || '-',
+        record.check_in || '-',
+        record.check_out || '-',
+        workMinutes > 0 ? formatDuration(workMinutes) : (record.check_in && !record.check_out ? '근무중' : '-'),
+        record.check_in_method === 'face' ? '얼굴' :
+          record.check_in_method === 'password' ? '비밀번호' :
+          record.check_in_method === 'admin' ? '관리자' : '-',
+        record.notes || '',
+      ];
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    
+    // 열 너비 설정
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
+      { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 20 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, '출퇴근기록');
+    
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    
+    const fileName = viewMode === 'day' 
+      ? `출퇴근기록_${selectedDate}.xlsx`
+      : `출퇴근기록_${selectedMonth}.xlsx`;
+    saveAs(blob, fileName);
+    toast.success('엑셀 파일이 다운로드되었습니다');
+  };
+
   if (isLoading) {
     return (
       <div>
@@ -177,29 +246,77 @@ export function AttendanceListPage() {
       <div className="mt-16">
         {/* 날짜 선택 및 통계 */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-          {/* 날짜 선택 */}
-          <div className="flex items-center gap-2">
-            <button onClick={() => handleDateChange(-1)} className="btn btn-ghost btn-sm">
-              <ChevronLeft size={18} />
-            </button>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="input pl-10 w-44"
-              />
+          {/* 보기 모드 전환 + 날짜 선택 */}
+          <div className="flex items-center gap-4">
+            {/* 일/월 전환 */}
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('day')}
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  viewMode === 'day' 
+                    ? 'bg-white text-gray-900 shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <CalendarDays size={16} className="inline mr-1" />
+                일별
+              </button>
+              <button
+                onClick={() => setViewMode('month')}
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  viewMode === 'month' 
+                    ? 'bg-white text-gray-900 shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <LayoutGrid size={16} className="inline mr-1" />
+                월별
+              </button>
             </div>
-            <button onClick={() => handleDateChange(1)} className="btn btn-ghost btn-sm">
-              <ChevronRight size={18} />
-            </button>
-            <button
-              onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-              className="btn btn-secondary btn-sm"
-            >
-              오늘
-            </button>
+
+            {/* 날짜/월 선택 */}
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleDateChange(-1)} className="btn btn-ghost btn-sm">
+                <ChevronLeft size={18} />
+              </button>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                {viewMode === 'day' ? (
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="input pl-10 w-44"
+                  />
+                ) : (
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="input pl-10 w-44"
+                  />
+                )}
+              </div>
+              <button onClick={() => handleDateChange(1)} className="btn btn-ghost btn-sm">
+                <ChevronRight size={18} />
+              </button>
+              {viewMode === 'day' && (
+                <button
+                  onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                  className="btn btn-secondary btn-sm"
+                >
+                  오늘
+                </button>
+              )}
+              {viewMode === 'month' && (
+                <button
+                  onClick={() => setSelectedMonth(new Date().toISOString().slice(0, 7))}
+                  className="btn btn-secondary btn-sm"
+                >
+                  이번 달
+                </button>
+              )}
+            </div>
           </div>
 
           {/* 통계 요약 */}
@@ -260,7 +377,11 @@ export function AttendanceListPage() {
             )}
             
             {/* 엑셀 내보내기 */}
-            <button className="btn btn-secondary">
+            <button 
+              className="btn btn-secondary"
+              onClick={handleExportExcel}
+              disabled={!filteredRecords || filteredRecords.length === 0}
+            >
               <Download size={18} />
               엑셀 다운로드
             </button>
@@ -275,6 +396,9 @@ export function AttendanceListPage() {
                 <tr>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">직원</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">부서</th>
+                  {viewMode === 'month' && (
+                    <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">날짜</th>
+                  )}
                   <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">출근</th>
                   <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">퇴근</th>
                   <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">근무시간</th>
@@ -307,6 +431,11 @@ export function AttendanceListPage() {
                       <td className="px-6 py-4">
                         <p className="text-sm text-gray-600">{record.employee?.department || '-'}</p>
                       </td>
+                      {viewMode === 'month' && (
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-sm text-gray-900">{record.date}</span>
+                        </td>
+                      )}
                       <td className="px-6 py-4 text-center">
                         {record.check_in ? (
                           <span className="text-sm font-medium text-green-600">
@@ -381,7 +510,10 @@ export function AttendanceListPage() {
             <div className="py-12 text-center">
               <Clock className="mx-auto mb-3 text-gray-300" size={48} />
               <p className="text-gray-500">
-                {selectedDate}의 출퇴근 기록이 없습니다.
+                {viewMode === 'day' 
+                  ? `${selectedDate}의 출퇴근 기록이 없습니다.`
+                  : `${selectedMonth}의 출퇴근 기록이 없습니다.`
+                }
               </p>
             </div>
           )}

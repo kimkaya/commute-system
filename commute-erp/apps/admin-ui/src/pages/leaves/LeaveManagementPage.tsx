@@ -13,12 +13,13 @@ import {
   Loader2,
   Calendar,
   Plus,
+  CalendarDays,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { getLeaves, getEmployees, approveLeave, rejectLeave, createLeave } from '../../lib/api';
-import type { Leave, Employee } from '../../lib/api';
+import { getLeaves, getEmployees, approveLeave, rejectLeave, createLeave, getEmployeeLeaveBalance } from '../../lib/api';
+import type { Leave, Employee, LeaveBalance } from '../../lib/api';
 
 type LeaveStatus = 'pending' | 'approved' | 'rejected';
 
@@ -77,6 +78,9 @@ export function LeaveManagementPage() {
   const [selectedLeave, setSelectedLeave] = useState<Leave | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
+  const [selectedEmployeeBalance, setSelectedEmployeeBalance] = useState<LeaveBalance | null>(null);
+  const [loadingBalance, setLoadingBalance] = useState(false);
   const [newLeave, setNewLeave] = useState({
     employee_id: '',
     type: 'annual',
@@ -175,6 +179,23 @@ export function LeaveManagementPage() {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return diffDays;
   }
+
+  // 잔여 연차 조회
+  const handleCheckBalance = async (employeeId: string) => {
+    setLoadingBalance(true);
+    try {
+      const currentYear = new Date().getFullYear();
+      const balance = await getEmployeeLeaveBalance(employeeId, currentYear);
+      const employee = employees?.find(e => e.id === employeeId);
+      setSelectedEmployeeBalance({ ...balance, employee });
+      setShowBalanceModal(true);
+    } catch (error) {
+      console.error('Failed to load balance:', error);
+      toast.error('연차 정보를 불러오는데 실패했습니다');
+    } finally {
+      setLoadingBalance(false);
+    }
+  };
 
   const handleApprove = (id: string) => {
     approveMutation.mutate(id);
@@ -317,6 +338,7 @@ export function LeaveManagementPage() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">사유</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">상태</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">신청일</th>
+                <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">잔여 연차</th>
                 <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">처리</th>
               </tr>
             </thead>
@@ -374,6 +396,16 @@ export function LeaveManagementPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">
                     {format(new Date(leave.requested_at), 'M.d HH:mm')}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => handleCheckBalance(leave.employee_id)}
+                      className="text-sm text-primary-600 hover:underline"
+                      disabled={loadingBalance}
+                    >
+                      <CalendarDays size={16} className="inline mr-1" />
+                      조회
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {leave.status === 'pending' ? (
@@ -630,6 +662,76 @@ export function LeaveManagementPage() {
                 className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
               >
                 {createMutation.isPending ? '등록 중...' : '등록'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 잔여 연차 모달 */}
+      {showBalanceModal && selectedEmployeeBalance && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">연차 현황</h3>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* 직원 정보 */}
+              <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+                  <User size={24} className="text-gray-500" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">{selectedEmployeeBalance.employee?.name || '알 수 없음'}</p>
+                  <p className="text-sm text-gray-500">
+                    {selectedEmployeeBalance.employee?.employee_number || '-'} · {selectedEmployeeBalance.employee?.department || '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* 연차 현황 */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 bg-blue-50 rounded-lg text-center">
+                  <p className="text-xs text-blue-600 mb-1">총 연차</p>
+                  <p className="text-2xl font-bold text-blue-700">{selectedEmployeeBalance.annual_total}</p>
+                  <p className="text-xs text-blue-500">일</p>
+                </div>
+                <div className="p-4 bg-orange-50 rounded-lg text-center">
+                  <p className="text-xs text-orange-600 mb-1">사용</p>
+                  <p className="text-2xl font-bold text-orange-700">{selectedEmployeeBalance.annual_used}</p>
+                  <p className="text-xs text-orange-500">일</p>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg text-center">
+                  <p className="text-xs text-green-600 mb-1">잔여</p>
+                  <p className="text-2xl font-bold text-green-700">{selectedEmployeeBalance.annual_remaining}</p>
+                  <p className="text-xs text-green-500">일</p>
+                </div>
+              </div>
+
+              {/* 병가 현황 */}
+              {selectedEmployeeBalance.sick_used > 0 && (
+                <div className="p-3 bg-red-50 rounded-lg">
+                  <p className="text-sm text-red-700">
+                    병가 사용: {selectedEmployeeBalance.sick_used}일
+                  </p>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500 text-center">
+                {new Date().getFullYear()}년 기준
+              </p>
+            </div>
+
+            <div className="p-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowBalanceModal(false);
+                  setSelectedEmployeeBalance(null);
+                }}
+                className="w-full py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                닫기
               </button>
             </div>
           </div>

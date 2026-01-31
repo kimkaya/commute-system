@@ -479,3 +479,91 @@ export async function createInquiry(inquiry: Inquiry): Promise<{
     return { success: false, error: '문의 접수 중 오류가 발생했습니다.' };
   }
 }
+
+// =====================================================
+// 직원 알림 API
+// =====================================================
+
+export interface EmployeeNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  created_at: string;
+  read_at: string | null;
+  data?: Record<string, unknown>;
+}
+
+export async function getMyNotifications(employeeId: string, limit = 20): Promise<EmployeeNotification[]> {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('business_id', BUSINESS_ID)
+      .or(`recipient_id.eq.${employeeId},recipient_id.is.null`)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Failed to load notifications:', error);
+      return [];
+    }
+
+    return (data || []).map(n => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      created_at: n.created_at,
+      read_at: n.read_at,
+      data: n.data,
+    }));
+  } catch (err) {
+    console.error('Failed to load notifications:', err);
+    return [];
+  }
+}
+
+export async function getUnreadNotificationCount(employeeId: string): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', BUSINESS_ID)
+      .or(`recipient_id.eq.${employeeId},recipient_id.is.null`)
+      .is('read_at', null);
+
+    if (error) {
+      console.error('Failed to get unread count:', error);
+      return 0;
+    }
+    return count || 0;
+  } catch (err) {
+    console.error('Failed to get unread count:', err);
+    return 0;
+  }
+}
+
+export async function markNotificationAsRead(notificationId: string): Promise<void> {
+  try {
+    await supabase
+      .from('notifications')
+      .update({ read_at: new Date().toISOString(), status: 'read' })
+      .eq('id', notificationId);
+  } catch (err) {
+    console.error('Failed to mark as read:', err);
+  }
+}
+
+export async function markAllNotificationsAsRead(employeeId: string): Promise<void> {
+  try {
+    await supabase
+      .from('notifications')
+      .update({ read_at: new Date().toISOString(), status: 'read' })
+      .eq('business_id', BUSINESS_ID)
+      .or(`recipient_id.eq.${employeeId},recipient_id.is.null`)
+      .is('read_at', null);
+  } catch (err) {
+    console.error('Failed to mark all as read:', err);
+  }
+}
