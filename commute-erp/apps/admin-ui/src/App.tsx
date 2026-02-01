@@ -23,6 +23,7 @@ import { SchedulePage } from './pages/schedules/SchedulePage';
 import { LeaveManagementPage } from './pages/leaves/LeaveManagementPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
+import { DeviceManagementPage } from './pages/devices/DeviceManagementPage';
 
 // Placeholder pages
 function PlaceholderPage({ title }: { title: string }) {
@@ -109,6 +110,9 @@ function App() {
 
             {/* 컴플라이언스 */}
             <Route path="/compliance" element={<CompliancePage />} />
+
+            {/* 기기 관리 */}
+            <Route path="/devices" element={<DeviceManagementPage />} />
 
             {/* 보고서 */}
             <Route path="/reports" element={<ReportsPage />} />

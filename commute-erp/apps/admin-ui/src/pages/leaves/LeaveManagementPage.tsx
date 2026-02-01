@@ -230,106 +230,107 @@ export function LeaveManagementPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 헤더 */}
-      <div className="flex justify-between items-start">
+    <div className="space-y-4 lg:space-y-6">
+      {/* 헤더 - 모바일 최적화 */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">휴가 관리</h1>
-          <p className="text-gray-500 mt-1">직원들의 휴가 신청을 승인/반려합니다</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">휴가 관리</h1>
+          <p className="text-sm text-gray-500 mt-1">직원들의 휴가 신청을 승인/반려합니다</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="btn btn-primary"
+          className="btn btn-primary whitespace-nowrap self-start"
         >
           <Plus size={18} />
-          휴가 등록
+          <span className="hidden sm:inline">휴가</span> 등록
         </button>
       </div>
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* 통계 카드 - 모바일: 3열 컴팩트 */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <div
-          className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+          className={`p-2 sm:p-4 rounded-xl border-2 cursor-pointer transition-all ${
             statusFilter === 'pending'
               ? 'border-yellow-500 bg-yellow-50'
               : 'border-gray-200 bg-white hover:border-yellow-300'
           }`}
           onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <Clock className="text-yellow-600" size={20} />
+          <div className="flex flex-col sm:flex-row items-center sm:gap-3 text-center sm:text-left">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-yellow-100 rounded-lg flex items-center justify-center mb-1 sm:mb-0">
+              <Clock className="text-yellow-600" size={16} />
             </div>
             <div>
-              <p className="text-sm text-gray-500">승인 대기</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+              <p className="text-xs text-gray-500">대기</p>
+              <p className="text-lg sm:text-2xl font-bold text-yellow-600">{stats.pending}</p>
             </div>
           </div>
         </div>
         <div
-          className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+          className={`p-2 sm:p-4 rounded-xl border-2 cursor-pointer transition-all ${
             statusFilter === 'approved'
               ? 'border-green-500 bg-green-50'
               : 'border-gray-200 bg-white hover:border-green-300'
           }`}
           onClick={() => setStatusFilter(statusFilter === 'approved' ? 'all' : 'approved')}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="text-green-600" size={20} />
+          <div className="flex flex-col sm:flex-row items-center sm:gap-3 text-center sm:text-left">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-lg flex items-center justify-center mb-1 sm:mb-0">
+              <CheckCircle className="text-green-600" size={16} />
             </div>
             <div>
-              <p className="text-sm text-gray-500">승인 완료</p>
-              <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
+              <p className="text-xs text-gray-500">승인</p>
+              <p className="text-lg sm:text-2xl font-bold text-green-600">{stats.approved}</p>
             </div>
           </div>
         </div>
         <div
-          className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+          className={`p-2 sm:p-4 rounded-xl border-2 cursor-pointer transition-all ${
             statusFilter === 'rejected'
               ? 'border-red-500 bg-red-50'
               : 'border-gray-200 bg-white hover:border-red-300'
           }`}
           onClick={() => setStatusFilter(statusFilter === 'rejected' ? 'all' : 'rejected')}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-              <XCircle className="text-red-600" size={20} />
+          <div className="flex flex-col sm:flex-row items-center sm:gap-3 text-center sm:text-left">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-100 rounded-lg flex items-center justify-center mb-1 sm:mb-0">
+              <XCircle className="text-red-600" size={16} />
             </div>
             <div>
-              <p className="text-sm text-gray-500">반려</p>
-              <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
+              <p className="text-xs text-gray-500">반려</p>
+              <p className="text-lg sm:text-2xl font-bold text-red-600">{stats.rejected}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* 검색 */}
-      <div className="flex gap-4">
+      <div className="flex gap-2 sm:gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
-            placeholder="직원명, 사원번호, 부서로 검색"
+            placeholder="이름, 사번, 부서 검색"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
         {statusFilter !== 'all' && (
           <button
             onClick={() => setStatusFilter('all')}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+            className="px-3 py-2 text-xs sm:text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap"
           >
-            필터 초기화
+            초기화
           </button>
         )}
       </div>
 
-      {/* 목록 */}
+      {/* 목록 - 데스크톱: 테이블, 모바일: 카드 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        {/* 데스크톱 테이블 */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">신청자</th>
@@ -441,10 +442,101 @@ export function LeaveManagementPage() {
           </table>
         </div>
 
+        {/* 모바일 카드 뷰 */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {filteredLeaves.map((leave) => (
+            <div key={leave.id} className="p-4">
+              {/* 상단: 이름 + 상태 */}
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-medium text-gray-600">
+                      {leave.employee?.name?.charAt(0) || '?'}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {leave.employee?.name || '알 수 없음'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {leave.employee?.department || '-'}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${
+                    statusConfig[leave.status as LeaveStatus]?.bgColor || 'bg-gray-50'
+                  } ${statusConfig[leave.status as LeaveStatus]?.color || 'text-gray-600'}`}
+                >
+                  {statusConfig[leave.status as LeaveStatus]?.icon}
+                  {statusConfig[leave.status as LeaveStatus]?.label || leave.status}
+                </span>
+              </div>
+
+              {/* 중간: 휴가 정보 */}
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
+                    leaveTypeColors[leave.type] || 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  {leaveTypeLabels[leave.type] || leave.type}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {format(new Date(leave.start_date), 'M.d', { locale: ko })}
+                  {leave.start_date !== leave.end_date && ` ~ ${format(new Date(leave.end_date), 'M.d', { locale: ko })}`}
+                  ({leave.duration}일)
+                </span>
+              </div>
+
+              {/* 사유 */}
+              {leave.reason && (
+                <p className="text-xs text-gray-600 mb-3 line-clamp-2">{leave.reason}</p>
+              )}
+
+              {/* 하단: 액션 */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                <button
+                  onClick={() => handleCheckBalance(leave.employee_id)}
+                  className="text-xs text-primary-600"
+                  disabled={loadingBalance}
+                >
+                  <CalendarDays size={14} className="inline mr-1" />
+                  연차조회
+                </button>
+                {leave.status === 'pending' ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleApprove(leave.id)}
+                      className="px-3 py-1 rounded bg-green-50 text-green-600 text-xs font-medium"
+                      disabled={approveMutation.isPending}
+                    >
+                      승인
+                    </button>
+                    <button
+                      onClick={() => setSelectedLeave(leave)}
+                      className="px-3 py-1 rounded bg-red-50 text-red-600 text-xs font-medium"
+                    >
+                      반려
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSelectedLeave(leave)}
+                    className="text-xs text-primary-600"
+                  >
+                    상세
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
         {filteredLeaves.length === 0 && (
           <div className="py-12 text-center text-gray-500">
-            <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            해당하는 휴가 신청이 없습니다
+            <Calendar className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 text-gray-300" />
+            <p className="text-sm">해당하는 휴가 신청이 없습니다</p>
           </div>
         )}
       </div>

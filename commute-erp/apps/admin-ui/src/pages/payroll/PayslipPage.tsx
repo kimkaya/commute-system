@@ -4,7 +4,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Header } from '../../components/layout/Header';
 import {
   ArrowLeft,
   Printer,
@@ -280,13 +279,10 @@ export function PayslipPage() {
 
   if (isLoading) {
     return (
-      <div>
-        <Header title="급여명세서" subtitle="로딩 중..." />
-        <div className="mt-16 flex items-center justify-center py-20">
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 size={48} className="animate-spin text-primary-500" />
-            <p className="text-gray-500">급여명세서를 불러오는 중...</p>
-          </div>
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 size={48} className="animate-spin text-primary-500" />
+          <p className="text-gray-500">급여명세서를 불러오는 중...</p>
         </div>
       </div>
     );
@@ -295,19 +291,16 @@ export function PayslipPage() {
   if (error || !payslip) {
     return (
       <div>
-        <Header title="급여명세서" subtitle="오류" />
-        <div className="mt-16">
-          <div className="flex items-center justify-between mb-6">
-            <Link to="/payroll" className="btn btn-secondary">
-              <ArrowLeft size={18} />
-              목록으로
-            </Link>
-          </div>
-          <div className="card p-8 text-center">
-            <AlertCircle size={48} className="mx-auto text-danger-500 mb-4" />
-            <p className="text-gray-700 font-medium">{error || '데이터를 찾을 수 없습니다.'}</p>
-            <p className="text-gray-500 text-sm mt-2">해당 기간의 급여가 계산되지 않았을 수 있습니다.</p>
-          </div>
+        <div className="flex items-center justify-between mb-6">
+          <Link to="/payroll" className="btn btn-secondary">
+            <ArrowLeft size={18} />
+            목록으로
+          </Link>
+        </div>
+        <div className="card p-8 text-center">
+          <AlertCircle size={48} className="mx-auto text-danger-500 mb-4" />
+          <p className="text-gray-700 font-medium">{error || '데이터를 찾을 수 없습니다.'}</p>
+          <p className="text-gray-500 text-sm mt-2">해당 기간의 급여가 계산되지 않았을 수 있습니다.</p>
         </div>
       </div>
     );
@@ -315,14 +308,8 @@ export function PayslipPage() {
 
   return (
     <div>
-      <Header
-        title="급여명세서"
-        subtitle={`${payslip.period.year}년 ${payslip.period.month}월`}
-      />
-
-      <div className="mt-16">
-        {/* 액션 바 */}
-        <div className="flex items-center justify-between mb-6">
+      {/* 액션 바 */}
+      <div className="flex items-center justify-between mb-6">
           <Link to="/payroll" className="btn btn-secondary">
             <ArrowLeft size={18} />
             목록으로
@@ -662,7 +649,6 @@ export function PayslipPage() {
             </div>
           </div>
         </div>
-      </div>
 
       {/* 인쇄 스타일 */}
       <style>{`

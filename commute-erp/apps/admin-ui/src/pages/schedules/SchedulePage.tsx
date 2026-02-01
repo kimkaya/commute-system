@@ -1,5 +1,5 @@
 // =====================================================
-// 스케줄 관리 페이지 (API 연동)
+// 스케줄 관리 페이지 (API 연동) - 모바일 반응형
 // =====================================================
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -14,6 +14,8 @@ import {
   AlertCircle,
   Clock,
   Coffee,
+  List,
+  Calendar,
 } from 'lucide-react';
 import {
   format,
@@ -70,6 +72,11 @@ export function SchedulePage() {
   const [bulkShift, setBulkShift] = useState('full');
   const [bulkStartDate, setBulkStartDate] = useState('');
   const [bulkEndDate, setBulkEndDate] = useState('');
+  
+  // 모바일: 일간 뷰 인덱스 (0~6)
+  const [mobileDayIndex, setMobileDayIndex] = useState(0);
+  // 모바일: 뷰 모드 (calendar | list)
+  const [mobileViewMode, setMobileViewMode] = useState<'calendar' | 'list'>('list');
 
   // 이번 주 날짜
   const weekDays = useMemo(() => {
@@ -262,12 +269,12 @@ export function SchedulePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">스케줄 관리</h1>
-          <p className="text-gray-500 mt-1">직원들의 근무 스케줄을 관리합니다</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">스케줄 관리</h1>
+          <p className="text-sm text-gray-500 mt-1 hidden sm:block">직원들의 근무 스케줄을 관리합니다</p>
         </div>
         <button
           onClick={() => {
@@ -275,42 +282,43 @@ export function SchedulePage() {
             setBulkStartDate(format(weekDays[0], 'yyyy-MM-dd'));
             setBulkEndDate(format(weekDays[weekDays.length - 1], 'yyyy-MM-dd'));
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm sm:text-base"
         >
           <Copy size={18} />
-          일괄 적용
+          <span>일괄 적용</span>
         </button>
       </div>
 
       {/* 에러 메시지 */}
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
+        <div className="p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2 text-sm">
           <AlertCircle size={18} />
           {error}
         </div>
       )}
 
-      {/* 이번 주 통계 */}
-      <div className="grid grid-cols-5 gap-4">
+      {/* 이번 주 통계 - 모바일: 2x3 그리드, 데스크톱: 5열 */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
         {shiftTypes.map(shift => {
           const Icon = shift.icon;
           return (
             <div
               key={shift.id}
-              className="bg-white rounded-xl p-4 border border-gray-200"
+              className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200"
             >
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1 sm:mb-2">
                 <div
-                  className={`w-8 h-8 ${shift.color} rounded-lg flex items-center justify-center`}
+                  className={`w-6 h-6 sm:w-8 sm:h-8 ${shift.color} rounded-lg flex items-center justify-center`}
                 >
-                  <Icon size={16} className="text-white" />
+                  <Icon size={14} className="text-white sm:hidden" />
+                  <Icon size={16} className="text-white hidden sm:block" />
                 </div>
-                <span className="text-sm font-medium text-gray-700">{shift.label}</span>
+                <span className="text-xs sm:text-sm font-medium text-gray-700">{shift.label}</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-lg sm:text-2xl font-bold text-gray-900">
                 {weekStats[shift.id as keyof typeof weekStats] || 0}
               </p>
-              <p className="text-xs text-gray-500">이번 주 배정</p>
+              <p className="text-[10px] sm:text-xs text-gray-500">이번 주</p>
             </div>
           );
         })}
@@ -318,17 +326,23 @@ export function SchedulePage() {
 
       {/* 캘린더 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-4">
+        {/* 주간 네비게이션 */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 border-b border-gray-200 gap-3">
+          <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
             <button
               onClick={prevWeek}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <ChevronLeft size={20} />
             </button>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {format(weekDays[0], 'yyyy년 M월 d일', { locale: ko })} ~{' '}
-              {format(weekDays[weekDays.length - 1], 'M월 d일', { locale: ko })}
+            <h2 className="text-sm sm:text-lg font-semibold text-gray-900 text-center">
+              <span className="hidden sm:inline">
+                {format(weekDays[0], 'yyyy년 M월 d일', { locale: ko })} ~{' '}
+                {format(weekDays[weekDays.length - 1], 'M월 d일', { locale: ko })}
+              </span>
+              <span className="sm:hidden">
+                {format(weekDays[0], 'M/d', { locale: ko })} ~ {format(weekDays[weekDays.length - 1], 'M/d', { locale: ko })}
+              </span>
             </h2>
             <button
               onClick={nextWeek}
@@ -338,12 +352,14 @@ export function SchedulePage() {
             </button>
             <button
               onClick={goToToday}
-              className="px-3 py-1 text-sm text-primary-600 hover:bg-primary-50 rounded-lg"
+              className="px-2 sm:px-3 py-1 text-xs sm:text-sm text-primary-600 hover:bg-primary-50 rounded-lg"
             >
               오늘
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          
+          {/* 범례 - 데스크톱만 표시 */}
+          <div className="hidden lg:flex items-center gap-2">
             {shiftTypes.map(shift => (
               <div key={shift.id} className="flex items-center gap-1 text-xs">
                 <div className={`w-3 h-3 ${shift.color} rounded`} />
@@ -351,10 +367,192 @@ export function SchedulePage() {
               </div>
             ))}
           </div>
+          
+          {/* 모바일: 뷰 모드 토글 */}
+          <div className="flex lg:hidden items-center gap-2 justify-center sm:justify-end">
+            <button
+              onClick={() => setMobileViewMode('list')}
+              className={`p-2 rounded-lg ${mobileViewMode === 'list' ? 'bg-primary-100 text-primary-600' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              <List size={18} />
+            </button>
+            <button
+              onClick={() => setMobileViewMode('calendar')}
+              className={`p-2 rounded-lg ${mobileViewMode === 'calendar' ? 'bg-primary-100 text-primary-600' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              <Calendar size={18} />
+            </button>
+          </div>
         </div>
 
-        {/* 스케줄 테이블 */}
-        <div className="overflow-x-auto">
+        {/* 모바일: 일간 날짜 선택 탭 (리스트 뷰일 때) */}
+        {mobileViewMode === 'list' && (
+          <div className="lg:hidden flex overflow-x-auto border-b border-gray-200 scrollbar-hide">
+            {weekDays.map((day, idx) => (
+              <button
+                key={day.toISOString()}
+                onClick={() => setMobileDayIndex(idx)}
+                className={`flex-1 min-w-[50px] py-2 px-1 text-center border-b-2 transition-colors ${
+                  mobileDayIndex === idx
+                    ? 'border-primary-600 bg-primary-50'
+                    : 'border-transparent hover:bg-gray-50'
+                } ${
+                  isToday(day)
+                    ? 'text-primary-600 font-bold'
+                    : day.getDay() === 0
+                    ? 'text-red-500'
+                    : day.getDay() === 6
+                    ? 'text-blue-500'
+                    : 'text-gray-700'
+                }`}
+              >
+                <div className="text-[10px] sm:text-xs">{format(day, 'E', { locale: ko })}</div>
+                <div className="text-sm sm:text-base font-medium">{format(day, 'd')}</div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 모바일: 리스트 뷰 */}
+        <div className={`lg:hidden ${mobileViewMode === 'list' ? 'block' : 'hidden'}`}>
+          <div className="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
+            {employees.length === 0 ? (
+              <div className="px-4 py-8 text-center text-gray-500">
+                등록된 직원이 없습니다
+              </div>
+            ) : (
+              employees.map(employee => {
+                const dateStr = format(weekDays[mobileDayIndex], 'yyyy-MM-dd');
+                const shiftId = schedules[employee.id]?.[dateStr] || 'full';
+                const shift = shiftTypes.find(s => s.id === shiftId);
+                const isSelected =
+                  selectedCell?.employeeId === employee.id &&
+                  selectedCell?.date === dateStr;
+
+                return (
+                  <div key={employee.id} className="p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-medium text-gray-600">
+                          {employee.name.charAt(0)}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{employee.name}</p>
+                        <p className="text-xs text-gray-500">{employee.department || '-'}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="relative">
+                      <button
+                        onClick={() =>
+                          setSelectedCell(
+                            isSelected ? null : { employeeId: employee.id, date: dateStr }
+                          )
+                        }
+                        disabled={isSaving}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-medium text-white transition-all ${
+                          shift?.color || 'bg-gray-400'
+                        } ${isSelected ? 'ring-2 ring-primary-500' : ''} ${
+                          isSaving ? 'opacity-50' : ''
+                        }`}
+                      >
+                        {shift?.label}
+                        <span className="ml-1 opacity-80">{shift?.time !== '-' ? shift?.time?.split('-')[0] : ''}</span>
+                      </button>
+
+                      {/* 드롭다운 */}
+                      {isSelected && !isSaving && (
+                        <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1 min-w-[120px]">
+                          {shiftTypes.map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => handleShiftChange(employee.id, dateStr, s.id)}
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                                s.id === shiftId ? 'bg-gray-50' : ''
+                              }`}
+                            >
+                              <div className={`w-3 h-3 ${s.color} rounded`} />
+                              <span>{s.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* 모바일: 캘린더 뷰 (가로 스크롤) */}
+        <div className={`lg:hidden ${mobileViewMode === 'calendar' ? 'block' : 'hidden'} overflow-x-auto`}>
+          <table className="w-full min-w-[600px]">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="sticky left-0 bg-gray-50 px-2 py-2 text-left text-xs font-medium text-gray-700 w-24 border-r border-gray-200 z-10">
+                  직원
+                </th>
+                {weekDays.map(day => (
+                  <th
+                    key={day.toISOString()}
+                    className={`px-1 py-2 text-center text-xs font-medium min-w-[60px] ${
+                      isToday(day)
+                        ? 'bg-primary-50 text-primary-700'
+                        : day.getDay() === 0
+                        ? 'text-red-500'
+                        : day.getDay() === 6
+                        ? 'text-blue-500'
+                        : 'text-gray-700'
+                    }`}
+                  >
+                    <div>{format(day, 'E', { locale: ko })}</div>
+                    <div className="text-sm">{format(day, 'd')}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {employees.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
+                    등록된 직원이 없습니다
+                  </td>
+                </tr>
+              ) : (
+                employees.map(employee => (
+                  <tr key={employee.id} className="border-t border-gray-100">
+                    <td className="sticky left-0 bg-white px-2 py-2 border-r border-gray-200 z-10">
+                      <p className="text-xs font-medium text-gray-900 truncate">{employee.name}</p>
+                    </td>
+                    {weekDays.map(day => {
+                      const dateStr = format(day, 'yyyy-MM-dd');
+                      const shiftId = schedules[employee.id]?.[dateStr] || 'full';
+                      const shift = shiftTypes.find(s => s.id === shiftId);
+
+                      return (
+                        <td
+                          key={dateStr}
+                          className={`px-1 py-1 text-center ${isToday(day) ? 'bg-primary-50' : ''}`}
+                        >
+                          <div
+                            className={`py-1 px-1 rounded text-[10px] font-medium text-white ${shift?.color || 'bg-gray-400'}`}
+                          >
+                            {shift?.label}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 데스크톱: 스케줄 테이블 */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full min-w-[900px]">
             <thead>
               <tr className="bg-gray-50">
@@ -472,8 +670,8 @@ export function SchedulePage() {
       {/* 일괄 적용 모달 */}
       {showBulkModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white">
               <h3 className="text-lg font-semibold text-gray-900">스케줄 일괄 적용</h3>
               <button
                 onClick={() => setShowBulkModal(false)}
@@ -493,7 +691,7 @@ export function SchedulePage() {
                   {employees.map(emp => (
                     <label
                       key={emp.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors text-sm ${
                         selectedEmployees.includes(emp.id)
                           ? 'border-primary-500 bg-primary-50'
                           : 'border-gray-200 hover:bg-gray-50'
@@ -513,7 +711,7 @@ export function SchedulePage() {
                         }}
                         className="rounded text-primary-600"
                       />
-                      <span className="text-sm">{emp.name}</span>
+                      <span className="truncate">{emp.name}</span>
                     </label>
                   ))}
                 </div>
@@ -538,7 +736,7 @@ export function SchedulePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   근무 유형
                 </label>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                   {shiftTypes.map(shift => (
                     <button
                       key={shift.id}
@@ -554,7 +752,7 @@ export function SchedulePage() {
               </div>
 
               {/* 날짜 범위 */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     시작일
@@ -563,7 +761,7 @@ export function SchedulePage() {
                     type="date"
                     value={bulkStartDate}
                     onChange={e => setBulkStartDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                   />
                 </div>
                 <div>
@@ -575,23 +773,23 @@ export function SchedulePage() {
                     value={bulkEndDate}
                     onChange={e => setBulkEndDate(e.target.value)}
                     min={bulkStartDate}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-2 p-4 border-t border-gray-200">
+            <div className="flex gap-2 p-4 border-t border-gray-200 sticky bottom-0 bg-white">
               <button
                 onClick={() => setShowBulkModal(false)}
-                className="flex-1 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
+                className="flex-1 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 text-sm"
               >
                 취소
               </button>
               <button
                 onClick={handleBulkApply}
                 disabled={isSaving}
-                className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
               >
                 {isSaving && <Loader2 size={16} className="animate-spin" />}
                 적용하기

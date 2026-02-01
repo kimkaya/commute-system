@@ -1,9 +1,9 @@
 // =====================================================
-// 헤더 컴포넌트 (알림 기능 포함 + Realtime)
+// 헤더 컴포넌트 (알림 기능 포함 + Realtime + 모바일 반응형)
 // =====================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, Search, CheckCheck, X, FileText, Calendar, DollarSign, AlertTriangle, Info, Volume2 } from 'lucide-react';
+import { Bell, Search, CheckCheck, X, FileText, Calendar, DollarSign, AlertTriangle, Info, Volume2, Menu } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { 
   getNotifications, 
@@ -91,13 +91,14 @@ function playNotificationSound() {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
-  const { sidebarCollapsed } = useUIStore();
+  const { sidebarCollapsed, toggleMobileMenu } = useUIStore();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [hasNewNotification, setHasNewNotification] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // 알림 목록 로드
@@ -242,25 +243,46 @@ export function Header({ title, subtitle }: HeaderProps) {
 
   return (
     <header
-      className={`fixed top-0 right-0 h-16 bg-white border-b border-gray-200 z-30 flex items-center justify-between px-6 transition-all duration-300 ${
-        sidebarCollapsed ? 'left-16' : 'left-64'
+      className={`fixed top-0 right-0 h-16 bg-white border-b border-gray-200 z-30 flex items-center justify-between px-4 md:px-6 transition-all duration-300 left-0 md:left-16 ${
+        !sidebarCollapsed ? 'md:left-64' : ''
       }`}
     >
-      {/* 타이틀 */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+      {/* 좌측: 햄버거 메뉴 + 타이틀 */}
+      <div className="flex items-center gap-3">
+        {/* 모바일 햄버거 메뉴 */}
+        <button
+          onClick={toggleMobileMenu}
+          className="p-2 -ml-2 rounded-lg hover:bg-gray-100 text-gray-600 md:hidden"
+          aria-label="메뉴 열기"
+        >
+          <Menu size={24} />
+        </button>
+
+        {/* 타이틀 */}
+        <div className="min-w-0">
+          <h1 className="text-lg md:text-xl font-bold text-gray-900 truncate">{title}</h1>
+          {subtitle && <p className="text-xs md:text-sm text-gray-500 truncate hidden sm:block">{subtitle}</p>}
+        </div>
       </div>
 
       {/* 우측 액션 */}
-      <div className="flex items-center gap-4">
-        {/* 검색 */}
+      <div className="flex items-center gap-2 md:gap-4">
+        {/* 모바일 검색 토글 */}
+        <button
+          onClick={() => setIsSearchOpen(!isSearchOpen)}
+          className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 md:hidden"
+          aria-label="검색"
+        >
+          <Search size={20} />
+        </button>
+
+        {/* 데스크톱 검색 */}
         <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
             placeholder="검색..."
-            className="pl-10 pr-4 py-2 w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+            className="pl-10 pr-4 py-2 w-48 lg:w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
           />
         </div>
 
@@ -284,7 +306,7 @@ export function Header({ title, subtitle }: HeaderProps) {
 
           {/* 알림 드롭다운 */}
           {isDropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
+            <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-[400px] bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
               {/* 헤더 */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
                 <h3 className="font-semibold text-gray-900">알림</h3>
@@ -304,14 +326,14 @@ export function Header({ title, subtitle }: HeaderProps) {
                       className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
                     >
                       <CheckCheck size={14} />
-                      모두 읽음
+                      <span className="hidden sm:inline">모두 읽음</span>
                     </button>
                   )}
                 </div>
               </div>
 
               {/* 알림 목록 */}
-              <div className="max-h-[400px] overflow-y-auto">
+              <div className="max-h-[60vh] sm:max-h-[400px] overflow-y-auto">
                 {isLoading ? (
                   <div className="py-8 text-center text-gray-500">
                     <div className="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-2"></div>
@@ -385,6 +407,21 @@ export function Header({ title, subtitle }: HeaderProps) {
           )}
         </div>
       </div>
+
+      {/* 모바일 검색 바 (토글 시 표시) */}
+      {isSearchOpen && (
+        <div className="absolute left-0 right-0 top-full bg-white border-b border-gray-200 p-4 md:hidden">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="검색..."
+              autoFocus
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+            />
+          </div>
+        </div>
+      )}
     </header>
   );
 }

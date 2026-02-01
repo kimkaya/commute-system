@@ -497,20 +497,21 @@ export function ReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">보고서</h1>
-          <p className="text-gray-500 mt-1">각종 보고서를 생성하고 내보냅니다</p>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">보고서</h1>
+          <p className="text-gray-500 mt-1 text-xs sm:text-base">각종 보고서를 생성하고 내보냅니다</p>
         </div>
         <button
           onClick={handleDownloadAll}
           disabled={isGenerating}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors w-full sm:w-auto text-sm"
         >
           {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-          전체 보고서 다운로드
+          <span className="hidden sm:inline">전체 보고서 다운로드</span>
+          <span className="sm:hidden">전체 다운로드</span>
         </button>
       </div>
 
@@ -523,25 +524,25 @@ export function ReportsPage() {
       )}
 
       {/* 기간 선택 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-4 flex-wrap">
+      <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
-            <Filter size={18} className="text-gray-500" />
-            <span className="text-sm font-medium text-gray-700">기간 설정</span>
+            <Filter size={18} className="text-gray-500 hidden sm:block" />
+            <span className="text-xs sm:text-sm font-medium text-gray-700">기간 설정</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <input
               type="date"
               value={dateRange.start}
               onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              className="flex-1 sm:flex-none px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-xs sm:text-sm"
             />
             <span className="text-gray-500">~</span>
             <input
               type="date"
               value={dateRange.end}
               onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-              className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              className="flex-1 sm:flex-none px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-xs sm:text-sm"
             />
           </div>
           <div className="flex gap-2">
@@ -553,7 +554,7 @@ export function ReportsPage() {
                   end: format(endOfMonth(now), 'yyyy-MM-dd'),
                 });
               }}
-              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              className="flex-1 sm:flex-none px-3 py-1.5 text-xs sm:text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
             >
               이번 달
             </button>
@@ -565,7 +566,7 @@ export function ReportsPage() {
                   end: format(endOfMonth(lastMonth), 'yyyy-MM-dd'),
                 });
               }}
-              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              className="flex-1 sm:flex-none px-3 py-1.5 text-xs sm:text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
             >
               지난 달
             </button>
@@ -574,88 +575,88 @@ export function ReportsPage() {
       </div>
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users className="text-blue-600" size={20} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Users className="text-blue-600" size={18} />
             </div>
-            <span className="text-sm text-gray-500">총 직원</span>
+            <span className="text-xs sm:text-sm text-gray-500">총 직원</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
+          <p className="text-xl sm:text-2xl font-bold text-gray-900">
             {summaryData.attendance.totalEmployees}명
           </p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <Wallet className="text-green-600" size={20} />
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-lg flex items-center justify-center">
+              <Wallet className="text-green-600" size={18} />
             </div>
-            <span className="text-sm text-gray-500">총 급여</span>
+            <span className="text-xs sm:text-sm text-gray-500">총 급여</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
+          <p className="text-xl sm:text-2xl font-bold text-gray-900">
             {summaryData.payroll.totalPaid > 0 
-              ? formatCurrency(Math.round(summaryData.payroll.totalPaid / 10000)) + '만원'
+              ? formatCurrency(Math.round(summaryData.payroll.totalPaid / 10000)) + '만'
               : '-'}
           </p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Calendar className="text-purple-600" size={20} />
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Calendar className="text-purple-600" size={18} />
             </div>
-            <span className="text-sm text-gray-500">휴가 사용</span>
+            <span className="text-xs sm:text-sm text-gray-500">휴가 사용</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{summaryData.leave.totalUsed}일</p>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900">{summaryData.leave.totalUsed}일</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="text-orange-600" size={20} />
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+              <TrendingUp className="text-orange-600" size={18} />
             </div>
-            <span className="text-sm text-gray-500">연장근무</span>
+            <span className="text-xs sm:text-sm text-gray-500">연장근무</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {summaryData.attendance.overtimeHours}시간
+          <p className="text-xl sm:text-2xl font-bold text-gray-900">
+            {summaryData.attendance.overtimeHours}<span className="text-sm sm:text-base font-normal">h</span>
           </p>
         </div>
       </div>
 
       {/* 보고서 목록 */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
         {reportTypes.map((report) => {
           const Icon = report.icon;
           return (
             <div
               key={report.id}
-              className="bg-white rounded-xl border border-gray-200 p-5 hover:border-primary-300 hover:shadow-md transition-all"
+              className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5 hover:border-primary-300 hover:shadow-md transition-all"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className={`w-12 h-12 ${report.color} rounded-xl flex items-center justify-center`}>
-                  <Icon className="text-white" size={24} />
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${report.color} rounded-xl flex items-center justify-center`}>
+                  <Icon className="text-white" size={20} />
                 </div>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">{report.label}</h3>
-              <p className="text-sm text-gray-500 mb-4">{report.description}</p>
+              <h3 className="text-sm sm:text-lg font-semibold text-gray-900 mb-1">{report.label}</h3>
+              <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4 line-clamp-2">{report.description}</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => handleGenerate(report.id)}
                   disabled={isGenerating}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors text-sm"
+                  className="flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 sm:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors text-xs sm:text-sm"
                 >
                   {isGenerating ? (
-                    <Loader2 size={16} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
-                    <FileSpreadsheet size={16} />
+                    <FileSpreadsheet size={14} />
                   )}
-                  다운로드
+                  <span className="hidden sm:inline">다운로드</span>
                 </button>
                 <button
                   onClick={() => handlePrint(report.id)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                  className="flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 sm:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-xs sm:text-sm"
                 >
-                  <Printer size={16} />
-                  인쇄
+                  <Printer size={14} />
+                  <span className="hidden sm:inline">인쇄</span>
                 </button>
               </div>
             </div>
@@ -665,17 +666,19 @@ export function ReportsPage() {
 
       {/* 부서별 현황 테이블 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">부서별 현황</h3>
+        <div className="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900 text-sm sm:text-base">부서별 현황</h3>
           <button
             onClick={() => handleGenerate('attendance')}
-            className="text-sm text-primary-600 hover:underline flex items-center gap-1"
+            className="text-xs sm:text-sm text-primary-600 hover:underline flex items-center gap-1"
           >
             <Download size={14} />
-            내보내기
+            <span className="hidden sm:inline">내보내기</span>
           </button>
         </div>
-        <div className="overflow-x-auto">
+        
+        {/* 데스크톱 테이블 */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
@@ -741,6 +744,71 @@ export function ReportsPage() {
               </tfoot>
             )}
           </table>
+        </div>
+        
+        {/* 모바일 카드 뷰 */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {departmentStats.length === 0 ? (
+            <div className="px-4 py-8 text-center text-gray-500 text-sm">
+              해당 기간의 데이터가 없습니다
+            </div>
+          ) : (
+            <>
+              {departmentStats.map((dept) => (
+                <div key={dept.name} className="p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-gray-900 text-sm">{dept.name}</span>
+                    <span className="text-xs text-gray-500">{dept.employees}명</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="bg-gray-50 rounded p-2 text-center">
+                      <p className="text-gray-500">근무</p>
+                      <p className="font-medium text-gray-900">{Math.round(dept.totalHours)}h</p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-2 text-center">
+                      <p className="text-gray-500">지각</p>
+                      <p className={`font-medium ${dept.lateCount > 5 ? 'text-red-600' : dept.lateCount > 2 ? 'text-yellow-600' : 'text-gray-900'}`}>
+                        {dept.lateCount}회
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-2 text-center">
+                      <p className="text-gray-500">연장</p>
+                      <p className="font-medium text-gray-900">{Math.round(dept.overtimeHours)}h</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {/* 모바일 합계 */}
+              <div className="p-3 bg-gray-50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-gray-900 text-sm">합계</span>
+                  <span className="text-xs font-medium text-gray-900">
+                    {departmentStats.reduce((sum, d) => sum + d.employees, 0)}명
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="bg-white rounded p-2 text-center">
+                    <p className="text-gray-500">근무</p>
+                    <p className="font-semibold text-gray-900">
+                      {Math.round(departmentStats.reduce((sum, d) => sum + d.totalHours, 0))}h
+                    </p>
+                  </div>
+                  <div className="bg-white rounded p-2 text-center">
+                    <p className="text-gray-500">지각</p>
+                    <p className="font-semibold text-gray-900">
+                      {departmentStats.reduce((sum, d) => sum + d.lateCount, 0)}회
+                    </p>
+                  </div>
+                  <div className="bg-white rounded p-2 text-center">
+                    <p className="text-gray-500">연장</p>
+                    <p className="font-semibold text-gray-900">
+                      {Math.round(departmentStats.reduce((sum, d) => sum + d.overtimeHours, 0))}h
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

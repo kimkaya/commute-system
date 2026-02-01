@@ -26,6 +26,8 @@ import {
   checkOut,
   getTodayStatus,
   findMatchingEmployee,
+  validateAndLogIP,
+  getCurrentIP,
 } from './lib/api';
 import { supabase } from './lib/supabase';
 
@@ -77,14 +79,20 @@ function App() {
     loadEmployees();
   }, [loadEmployees]);
 
-  // 자동 리셋 타이머
+  // 자동 리셋 타이머 (성공: 1.5초, 에러: 2초)
   useEffect(() => {
     let timer: NodeJS.Timeout;
 
-    if (screen === 'success' || screen === 'error') {
+    if (screen === 'success') {
       timer = setTimeout(() => {
         handleReset();
-      }, 3000);
+        // 바로 얼굴 인식 모드로 전환
+        setScreen('detecting');
+      }, 1500);
+    } else if (screen === 'error') {
+      timer = setTimeout(() => {
+        handleReset();
+      }, 2000);
     }
 
     return () => {
@@ -154,21 +162,38 @@ function App() {
     [isProcessing, screen, setProcessing, setRecognizedEmployee, setScreen, setErrorMessage]
   );
 
-  // 출퇴근 처리
+  // 출퇴근 처리 (Optimistic UI - 즉시 완료 화면 표시 + IP 검증)
   const handleCheckInOut = async (type: 'in' | 'out') => {
     if (!recognizedEmployee) return;
 
-    setProcessing(true);
+    // IP 검증 및 로그 기록 (백그라운드에서 실행, 출퇴근은 차단하지 않음)
+    // 비정상 접속 시 관리자 알림만 발송
+    validateAndLogIP(
+      recognizedEmployee.id,
+      recognizedEmployee.name,
+      type === 'in' ? 'check_in' : 'check_out'
+    ).then((ipResult) => {
+      if (ipResult.isSuspicious) {
+        console.warn(`[보안 경고] 미승인 IP에서 출퇴근 시도: ${ipResult.currentIP}`);
+      }
+    }).catch((err) => {
+      console.error('IP validation error:', err);
+    });
 
+    // 즉시 완료 화면 표시 (Optimistic UI)
+    const now = new Date();
+    const time = now.toTimeString().split(' ')[0].substring(0, 5);
+    setResultMessage(`${time}에 ${type === 'in' ? '출근' : '퇴근'} 처리되었습니다.`);
+    setScreen('success');
+
+    // 백그라운드에서 DB 저장
     try {
       const result = type === 'in' 
         ? await checkIn(recognizedEmployee.id, authMethod)
         : await checkOut(recognizedEmployee.id, authMethod);
 
-      if (result.success) {
-        setResultMessage(result.message);
-        setScreen('success');
-      } else {
+      if (!result.success) {
+        // 실패 시 에러 화면으로 전환
         setErrorMessage(result.message);
         setScreen('error');
       }
@@ -176,8 +201,6 @@ function App() {
       console.error('Check in/out error:', error);
       setErrorMessage('처리 중 오류가 발생했습니다.');
       setScreen('error');
-    } finally {
-      setProcessing(false);
     }
   };
 

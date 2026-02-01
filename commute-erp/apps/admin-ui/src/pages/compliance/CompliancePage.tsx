@@ -3,7 +3,6 @@
 // =====================================================
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Header } from '../../components/layout/Header';
 import {
   Shield,
   AlertTriangle,
@@ -159,13 +158,10 @@ export function CompliancePage() {
 
   if (isLoading) {
     return (
-      <div>
-        <Header title="컴플라이언스" subtitle="근로기준법 준수 현황" />
-        <div className="mt-16 flex items-center justify-center h-64">
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 size={32} className="animate-spin text-primary-500" />
-            <p className="text-gray-500">데이터를 불러오는 중...</p>
-          </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 size={32} className="animate-spin text-primary-500" />
+          <p className="text-gray-500">데이터를 불러오는 중...</p>
         </div>
       </div>
     );
@@ -173,321 +169,364 @@ export function CompliancePage() {
 
   return (
     <div>
-      <Header title="컴플라이언스" subtitle="근로기준법 준수 현황" />
-
-      <div className="mt-16">
-        {/* 헤더 액션 */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="text-sm text-gray-500">
-            {lastChecked ? (
-              <>마지막 체크: {format(new Date(lastChecked), 'yyyy년 M월 d일')}</>
-            ) : (
-              '아직 컴플라이언스 체크가 실행되지 않았습니다'
-            )}
-          </div>
-          <button
-            onClick={handleRunCheck}
-            disabled={isRunning}
-            className="btn btn-primary"
-          >
-            {isRunning ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <RefreshCw size={18} />
-            )}
-            {isRunning ? '체크 중...' : '컴플라이언스 체크'}
-          </button>
+      {/* 헤더 액션 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div className="text-xs sm:text-sm text-gray-500">
+          {lastChecked ? (
+            <>마지막 체크: {format(new Date(lastChecked), 'yyyy년 M월 d일')}</>
+          ) : (
+            '아직 컴플라이언스 체크가 실행되지 않았습니다'
+          )}
         </div>
+        <button
+          onClick={handleRunCheck}
+          disabled={isRunning}
+          className="btn btn-primary w-full sm:w-auto text-sm"
+        >
+          {isRunning ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <RefreshCw size={18} />
+          )}
+          <span className="hidden sm:inline">{isRunning ? '체크 중...' : '컴플라이언스 체크'}</span>
+          <span className="sm:hidden">{isRunning ? '체크 중...' : '체크 실행'}</span>
+        </button>
+      </div>
 
-        {/* 요약 카드 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div
-            className={`stat-card cursor-pointer transition-all ${
-              filterStatus === 'all' ? 'ring-2 ring-primary-500' : ''
-            }`}
-            onClick={() => setFilterStatus('all')}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="stat-label">전체 직원</p>
-                <p className="stat-value">{stats.total}명</p>
-              </div>
-              <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
-                <Users className="text-primary-600" size={24} />
-              </div>
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-6">
+        <div
+          className={`stat-card cursor-pointer transition-all ${
+            filterStatus === 'all' ? 'ring-2 ring-primary-500' : ''
+          }`}
+          onClick={() => setFilterStatus('all')}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="stat-label text-xs sm:text-sm">전체 직원</p>
+              <p className="stat-value text-lg sm:text-2xl">{stats.total}명</p>
             </div>
-          </div>
-
-          <div
-            className={`stat-card cursor-pointer transition-all ${
-              filterStatus === 'compliant' ? 'ring-2 ring-success-500' : ''
-            }`}
-            onClick={() => setFilterStatus('compliant')}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="stat-label">양호</p>
-                <p className="stat-value text-success-600">{stats.good}명</p>
-              </div>
-              <div className="w-12 h-12 bg-success-50 rounded-xl flex items-center justify-center">
-                <CheckCircle className="text-success-600" size={24} />
-              </div>
-            </div>
-          </div>
-
-          <div
-            className={`stat-card cursor-pointer transition-all ${
-              filterStatus === 'warning' ? 'ring-2 ring-warning-500' : ''
-            }`}
-            onClick={() => setFilterStatus('warning')}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="stat-label">경고</p>
-                <p className="stat-value text-warning-600">{stats.warning}명</p>
-              </div>
-              <div className="w-12 h-12 bg-warning-50 rounded-xl flex items-center justify-center">
-                <AlertTriangle className="text-warning-600" size={24} />
-              </div>
-            </div>
-          </div>
-
-          <div
-            className={`stat-card cursor-pointer transition-all ${
-              filterStatus === 'violation' ? 'ring-2 ring-danger-500' : ''
-            }`}
-            onClick={() => setFilterStatus('violation')}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="stat-label">위반</p>
-                <p className="stat-value text-danger-500">{stats.violation}명</p>
-              </div>
-              <div className="w-12 h-12 bg-danger-50 rounded-xl flex items-center justify-center">
-                <AlertCircle className="text-danger-500" size={24} />
-              </div>
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary-100 rounded-xl flex items-center justify-center">
+              <Users className="text-primary-600" size={20} />
             </div>
           </div>
         </div>
 
-        {/* 주간 요약 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          <div className="card p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Clock className="text-primary-600" size={20} />
-              <h3 className="font-semibold text-gray-900">평균 주간 근무시간</h3>
+        <div
+          className={`stat-card cursor-pointer transition-all ${
+            filterStatus === 'compliant' ? 'ring-2 ring-success-500' : ''
+          }`}
+          onClick={() => setFilterStatus('compliant')}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="stat-label text-xs sm:text-sm">양호</p>
+              <p className="stat-value text-lg sm:text-2xl text-success-600">{stats.good}명</p>
             </div>
-            <p className="text-3xl font-bold text-gray-900">
-              {stats.avgHours.toFixed(1)}시간
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${
-                    stats.avgHours > 52
-                      ? 'bg-danger-500'
-                      : stats.avgHours > 40
-                      ? 'bg-warning-500'
-                      : 'bg-success-500'
-                  }`}
-                  style={{ width: `${Math.min((stats.avgHours / 52) * 100, 100)}%` }}
-                />
-              </div>
-              <span className="text-sm text-gray-500">/ 52시간</span>
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-success-50 rounded-xl flex items-center justify-center">
+              <CheckCircle className="text-success-600" size={20} />
             </div>
-          </div>
-
-          <div className="card p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <TrendingUp className="text-warning-600" size={20} />
-              <h3 className="font-semibold text-gray-900">총 연장근무</h3>
-            </div>
-            <p className="text-3xl font-bold text-warning-600">
-              {stats.totalOvertime.toFixed(1)}시간
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              인당 평균 {stats.total > 0 ? (stats.totalOvertime / stats.total).toFixed(1) : 0}시간
-            </p>
-          </div>
-
-          <div className="card p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Shield className="text-success-600" size={20} />
-              <h3 className="font-semibold text-gray-900">준수율</h3>
-            </div>
-            <p className="text-3xl font-bold text-success-600">
-              {stats.total > 0 ? ((stats.good / stats.total) * 100).toFixed(0) : 0}%
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {stats.good}명 양호 / {stats.total}명 전체
-            </p>
           </div>
         </div>
 
-        {/* 위반 목록 */}
-        {stats.violation > 0 && (
-          <div className="card mb-6 border-danger-200">
-            <div className="card-header bg-danger-50 border-danger-200">
-              <h2 className="text-lg font-semibold text-danger-700 flex items-center gap-2">
-                <AlertCircle size={20} />
-                즉시 조치 필요 ({stats.violation}건)
-              </h2>
+        <div
+          className={`stat-card cursor-pointer transition-all ${
+            filterStatus === 'warning' ? 'ring-2 ring-warning-500' : ''
+          }`}
+          onClick={() => setFilterStatus('warning')}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="stat-label text-xs sm:text-sm">경고</p>
+              <p className="stat-value text-lg sm:text-2xl text-warning-600">{stats.warning}명</p>
             </div>
-            <div className="divide-y divide-gray-100">
-              {complianceData
-                .filter(c => c.status === 'violation' && c.check_date === stats.latestDate)
-                .map(item => (
-                  <div key={item.id} className="p-4 hover:bg-gray-50">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 bg-danger-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-bold text-danger-600">
-                            {item.employee?.name?.charAt(0) || '?'}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {item.employee?.name || '알 수 없음'}
-                            <span className="text-gray-500 font-normal ml-2">
-                              {item.employee?.employee_number || '-'} · {item.employee?.department || '-'}
-                            </span>
-                          </p>
-                          <div className="mt-2">
-                            <p className="text-sm text-danger-600 flex items-center gap-1">
-                              <AlertCircle size={14} />
-                              {item.details?.violations?.join(', ') || item.details?.warnings?.join(', ') || '-'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className={`text-2xl font-bold ${getHoursColor(item.value || 0)}`}>
-                          {item.value?.toFixed(1)}h
-                        </p>
-                        <p className="text-xs text-gray-500">주간 근무</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-warning-50 rounded-xl flex items-center justify-center">
+              <AlertTriangle className="text-warning-600" size={20} />
             </div>
           </div>
-        )}
+        </div>
 
-        {/* 상세 테이블 */}
-        <div className="card overflow-hidden">
-          <div className="card-header">
-            <h2 className="text-lg font-semibold text-gray-900">
-              주간 근무현황 상세
-              {stats.latestDate && (
-                <span className="text-sm text-gray-500 font-normal ml-2">
-                  ({format(new Date(stats.latestDate), 'yyyy-MM-dd')} 기준)
-                </span>
-              )}
+        <div
+          className={`stat-card cursor-pointer transition-all ${
+            filterStatus === 'violation' ? 'ring-2 ring-danger-500' : ''
+          }`}
+          onClick={() => setFilterStatus('violation')}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="stat-label text-xs sm:text-sm">위반</p>
+              <p className="stat-value text-lg sm:text-2xl text-danger-500">{stats.violation}명</p>
+            </div>
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-danger-50 rounded-xl flex items-center justify-center">
+              <AlertCircle className="text-danger-500" size={20} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 주간 요약 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 mb-6">
+        <div className="card p-4 sm:p-6">
+          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <Clock className="text-primary-600" size={18} />
+            <h3 className="font-semibold text-gray-900 text-sm sm:text-base">평균 주간 근무시간</h3>
+          </div>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900">
+            {stats.avgHours.toFixed(1)}시간
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  stats.avgHours > 52
+                    ? 'bg-danger-500'
+                    : stats.avgHours > 40
+                    ? 'bg-warning-500'
+                    : 'bg-success-500'
+                }`}
+                style={{ width: `${Math.min((stats.avgHours / 52) * 100, 100)}%` }}
+              />
+            </div>
+            <span className="text-xs sm:text-sm text-gray-500">/ 52시간</span>
+          </div>
+        </div>
+
+        <div className="card p-4 sm:p-6">
+          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <TrendingUp className="text-warning-600" size={18} />
+            <h3 className="font-semibold text-gray-900 text-sm sm:text-base">총 연장근무</h3>
+          </div>
+          <p className="text-2xl sm:text-3xl font-bold text-warning-600">
+            {stats.totalOvertime.toFixed(1)}시간
+          </p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-2">
+            인당 평균 {stats.total > 0 ? (stats.totalOvertime / stats.total).toFixed(1) : 0}시간
+          </p>
+        </div>
+
+        <div className="card p-4 sm:p-6">
+          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <Shield className="text-success-600" size={18} />
+            <h3 className="font-semibold text-gray-900 text-sm sm:text-base">준수율</h3>
+          </div>
+          <p className="text-2xl sm:text-3xl font-bold text-success-600">
+            {stats.total > 0 ? ((stats.good / stats.total) * 100).toFixed(0) : 0}%
+          </p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-2">
+            {stats.good}명 양호 / {stats.total}명 전체
+          </p>
+        </div>
+      </div>
+
+      {/* 위반 목록 */}
+      {stats.violation > 0 && (
+        <div className="card mb-6 border-danger-200">
+          <div className="card-header bg-danger-50 border-danger-200">
+            <h2 className="text-base sm:text-lg font-semibold text-danger-700 flex items-center gap-2">
+              <AlertCircle size={18} />
+              즉시 조치 필요 ({stats.violation}건)
             </h2>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
-                    상태
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
-                    직원
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
-                    <div className="flex items-center justify-center gap-1">
-                      <Clock size={14} />
-                      주간 근무
-                    </div>
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
-                    <div className="flex items-center justify-center gap-1">
-                      <TrendingUp size={14} />
-                      기준
-                    </div>
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
-                    상세
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredData.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                      {complianceData.length === 0 
-                        ? '컴플라이언스 체크를 실행해주세요'
-                        : '해당하는 데이터가 없습니다'}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredData.map(item => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        {getStatusIcon(item.status)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {item.employee?.name || '알 수 없음'}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {item.employee?.employee_number || '-'} · {item.employee?.department || '-'}
+          <div className="divide-y divide-gray-100">
+            {complianceData
+              .filter(c => c.status === 'violation' && c.check_date === stats.latestDate)
+              .map(item => (
+                <div key={item.id} className="p-3 sm:p-4 hover:bg-gray-50">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-danger-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs sm:text-sm font-bold text-danger-600">
+                          {item.employee?.name?.charAt(0) || '?'}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-sm sm:text-base">
+                          {item.employee?.name || '알 수 없음'}
+                          <span className="text-gray-500 font-normal ml-2 text-xs sm:text-sm">
+                            {item.employee?.employee_number || '-'}
+                          </span>
+                        </p>
+                        <p className="text-xs text-gray-500 sm:hidden">
+                          {item.employee?.department || '-'}
+                        </p>
+                        <p className="text-gray-500 font-normal hidden sm:block text-sm">
+                          {item.employee?.department || '-'}
+                        </p>
+                        <div className="mt-1 sm:mt-2">
+                          <p className="text-xs sm:text-sm text-danger-600 flex items-center gap-1">
+                            <AlertCircle size={12} className="sm:hidden" />
+                            <AlertCircle size={14} className="hidden sm:block" />
+                            <span className="truncate">{item.details?.violations?.join(', ') || item.details?.warnings?.join(', ') || '-'}</span>
                           </p>
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={getHoursColor(item.value || 0)}>
-                          {item.value?.toFixed(1)}h
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-gray-500">
-                          {item.threshold}h
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-600">
-                          {item.details?.violations?.join(', ') || item.details?.warnings?.join(', ') || '양호'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-11 sm:ml-0">
+                      <p className={`text-xl sm:text-2xl font-bold ${getHoursColor(item.value || 0)}`}>
+                        {item.value?.toFixed(1)}h
+                      </p>
+                      <p className="text-xs text-gray-500">주간 근무</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
           </div>
         </div>
+      )}
 
-        {/* 근로기준법 안내 */}
-        <div className="mt-6 card bg-gray-50">
-          <div className="card-body">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Shield size={18} />
-              근로기준법 주요 기준
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-gray-500 mb-1">주간 최대 근무시간</p>
-                <p className="text-xl font-bold text-gray-900">52시간</p>
-                <p className="text-xs text-gray-400 mt-1">기본 40시간 + 연장 12시간</p>
+      {/* 상세 테이블 */}
+      <div className="card overflow-hidden">
+        <div className="card-header">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+            주간 근무현황 상세
+            {stats.latestDate && (
+              <span className="text-xs sm:text-sm text-gray-500 font-normal ml-2">
+                ({format(new Date(stats.latestDate), 'yyyy-MM-dd')} 기준)
+              </span>
+            )}
+          </h2>
+        </div>
+        
+        {/* 데스크톱 테이블 */}
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                  상태
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                  직원
+                </th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
+                  <div className="flex items-center justify-center gap-1">
+                    <Clock size={14} />
+                    주간 근무
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-900">
+                  <div className="flex items-center justify-center gap-1">
+                    <TrendingUp size={14} />
+                    기준
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                  상세
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                    {complianceData.length === 0 
+                      ? '컴플라이언스 체크를 실행해주세요'
+                      : '해당하는 데이터가 없습니다'}
+                  </td>
+                </tr>
+              ) : (
+                filteredData.map(item => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      {getStatusIcon(item.status)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {item.employee?.name || '알 수 없음'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {item.employee?.employee_number || '-'} · {item.employee?.department || '-'}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={getHoursColor(item.value || 0)}>
+                        {item.value?.toFixed(1)}h
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-gray-500">
+                        {item.threshold}h
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-gray-600">
+                        {item.details?.violations?.join(', ') || item.details?.warnings?.join(', ') || '양호'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* 모바일 카드 뷰 */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {filteredData.length === 0 ? (
+            <div className="px-4 py-8 text-center text-gray-500 text-sm">
+              {complianceData.length === 0 
+                ? '컴플라이언스 체크를 실행해주세요'
+                : '해당하는 데이터가 없습니다'}
+            </div>
+          ) : (
+            filteredData.map(item => (
+              <div key={item.id} className="p-3 hover:bg-gray-50">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {getStatusIcon(item.status)}
+                    <span className="font-medium text-gray-900 text-sm">
+                      {item.employee?.name || '알 수 없음'}
+                    </span>
+                  </div>
+                  <span className={`text-base font-bold ${getHoursColor(item.value || 0)}`}>
+                    {item.value?.toFixed(1)}h
+                  </span>
+                </div>
+                <div className="ml-7 text-xs text-gray-500 space-y-1">
+                  <p>{item.employee?.employee_number || '-'} · {item.employee?.department || '-'}</p>
+                  <p className="flex items-center gap-1">
+                    <span>기준: {item.threshold}h</span>
+                    <span className="mx-1">·</span>
+                    <span className={item.status === 'violation' ? 'text-danger-600' : item.status === 'warning' ? 'text-warning-600' : ''}>
+                      {item.details?.violations?.join(', ') || item.details?.warnings?.join(', ') || '양호'}
+                    </span>
+                  </p>
+                </div>
               </div>
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-gray-500 mb-1">연속 근무일 한도</p>
-                <p className="text-xl font-bold text-gray-900">6일</p>
-                <p className="text-xs text-gray-400 mt-1">7일째 휴무 필수</p>
-              </div>
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-gray-500 mb-1">야간근무 시간대</p>
-                <p className="text-xl font-bold text-gray-900">22:00 ~ 06:00</p>
-                <p className="text-xs text-gray-400 mt-1">50% 가산수당</p>
-              </div>
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-gray-500 mb-1">휴게시간</p>
-                <p className="text-xl font-bold text-gray-900">8시간당 1시간</p>
-                <p className="text-xs text-gray-400 mt-1">4시간당 30분</p>
-              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* 근로기준법 안내 */}
+      <div className="mt-6 card bg-gray-50">
+        <div className="card-body p-4 sm:p-6">
+          <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+            <Shield size={18} />
+            근로기준법 주요 기준
+          </h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 text-sm">
+            <div className="bg-white p-3 sm:p-4 rounded-lg">
+              <p className="text-gray-500 mb-1 text-xs sm:text-sm">주간 최대 근무시간</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900">52시간</p>
+              <p className="text-xs text-gray-400 mt-1 hidden sm:block">기본 40시간 + 연장 12시간</p>
+            </div>
+            <div className="bg-white p-3 sm:p-4 rounded-lg">
+              <p className="text-gray-500 mb-1 text-xs sm:text-sm">연속 근무일 한도</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900">6일</p>
+              <p className="text-xs text-gray-400 mt-1 hidden sm:block">7일째 휴무 필수</p>
+            </div>
+            <div className="bg-white p-3 sm:p-4 rounded-lg">
+              <p className="text-gray-500 mb-1 text-xs sm:text-sm">야간근무 시간대</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900">22~06시</p>
+              <p className="text-xs text-gray-400 mt-1 hidden sm:block">50% 가산수당</p>
+            </div>
+            <div className="bg-white p-3 sm:p-4 rounded-lg">
+              <p className="text-gray-500 mb-1 text-xs sm:text-sm">휴게시간</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900">8h당 1h</p>
+              <p className="text-xs text-gray-400 mt-1 hidden sm:block">4시간당 30분</p>
             </div>
           </div>
         </div>

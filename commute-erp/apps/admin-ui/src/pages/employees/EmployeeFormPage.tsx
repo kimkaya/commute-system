@@ -1,5 +1,5 @@
 // =====================================================
-// 직원 등록/수정 폼 페이지 (Supabase 연동)
+// 직원 등록/수정 폼 페이지 (Supabase 연동) - 모바일 반응형
 // =====================================================
 
 import { useState, useEffect } from 'react';
@@ -14,6 +14,7 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  ChevronDown,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getEmployee, createEmployee, updateEmployee, createEmployeeCredentials } from '../../lib/api';
@@ -73,6 +74,7 @@ export function EmployeeFormPage() {
   const [formData, setFormData] = useState<EmployeeFormData>(initialFormData);
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<'basic' | 'job' | 'salary' | 'auth'>('basic');
+  const [showMobileTabMenu, setShowMobileTabMenu] = useState(false);
 
   // 기존 직원 데이터 로드 (수정 모드)
   const { data: existingEmployee, isLoading: loadingEmployee } = useQuery({
@@ -253,9 +255,9 @@ export function EmployeeFormPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* 헤더 */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         <button
           onClick={() => navigate('/employees')}
           className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -263,19 +265,68 @@ export function EmployeeFormPage() {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">
             {isEdit ? '직원 정보 수정' : '직원 등록'}
           </h1>
-          <p className="text-gray-500 mt-1">
+          <p className="text-sm text-gray-500 mt-0.5 hidden sm:block">
             {isEdit ? '직원 정보를 수정합니다' : '새로운 직원을 등록합니다'}
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <div className="flex gap-6">
-          {/* 탭 네비게이션 */}
-          <div className="w-48 shrink-0">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+          {/* 모바일: 드롭다운 탭 선택 */}
+          <div className="lg:hidden relative">
+            <button
+              type="button"
+              onClick={() => setShowMobileTabMenu(!showMobileTabMenu)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl"
+            >
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const currentTab = tabs.find(t => t.id === activeTab);
+                  const Icon = currentTab?.icon || User;
+                  return (
+                    <>
+                      <Icon size={18} className="text-primary-600" />
+                      <span className="font-medium">{currentTab?.label}</span>
+                    </>
+                  );
+                })()}
+              </div>
+              <ChevronDown size={20} className={`text-gray-400 transition-transform ${showMobileTabMenu ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {showMobileTabMenu && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(tab.id as typeof activeTab);
+                        setShowMobileTabMenu(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left ${
+                        activeTab === tab.id
+                          ? 'bg-primary-50 text-primary-700'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon size={18} />
+                      <span className="text-sm font-medium">{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          
+          {/* 데스크톱: 탭 네비게이션 */}
+          <div className="hidden lg:block w-48 shrink-0">
             <nav className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
@@ -299,13 +350,13 @@ export function EmployeeFormPage() {
           </div>
 
           {/* 폼 내용 */}
-          <div className="flex-1 bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
             {/* 기본 정보 */}
             {activeTab === 'basic' && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <h2 className="text-lg font-semibold text-gray-900">기본 정보</h2>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       이름 <span className="text-red-500">*</span>
@@ -316,7 +367,7 @@ export function EmployeeFormPage() {
                       value={formData.name}
                       onChange={handleChange}
                       placeholder="홍길동"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     />
                   </div>
                   <div>
@@ -329,7 +380,7 @@ export function EmployeeFormPage() {
                       value={formData.email}
                       onChange={handleChange}
                       placeholder="hong@example.com"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     />
                   </div>
                   <div>
@@ -342,7 +393,7 @@ export function EmployeeFormPage() {
                       value={formData.phone}
                       onChange={handleChange}
                       placeholder="010-1234-5678"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     />
                   </div>
                   <div>
@@ -352,7 +403,7 @@ export function EmployeeFormPage() {
                       name="birth_date"
                       value={formData.birth_date}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     />
                   </div>
                 </div>
@@ -361,9 +412,9 @@ export function EmployeeFormPage() {
 
             {/* 직무 정보 */}
             {activeTab === 'job' && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <h2 className="text-lg font-semibold text-gray-900">직무 정보</h2>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       사원번호
@@ -375,12 +426,12 @@ export function EmployeeFormPage() {
                         value={formData.employee_number}
                         onChange={handleChange}
                         placeholder="EMP001"
-                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                       />
                       <button
                         type="button"
                         onClick={generateEmployeeNumber}
-                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs sm:text-sm whitespace-nowrap"
                       >
                         자동생성
                       </button>
@@ -394,7 +445,7 @@ export function EmployeeFormPage() {
                       name="department"
                       value={formData.department}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     >
                       <option value="">선택하세요</option>
                       {departments.map((dept) => (
@@ -412,7 +463,7 @@ export function EmployeeFormPage() {
                       name="position"
                       value={formData.position}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     >
                       <option value="">선택하세요</option>
                       {positions.map((pos) => (
@@ -431,7 +482,7 @@ export function EmployeeFormPage() {
                       name="hire_date"
                       value={formData.hire_date}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     />
                   </div>
                 </div>
@@ -440,16 +491,16 @@ export function EmployeeFormPage() {
 
             {/* 급여 정보 */}
             {activeTab === 'salary' && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <h2 className="text-lg font-semibold text-gray-900">급여 정보</h2>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">급여 유형</label>
                     <select
                       name="salary_type"
                       value={formData.salary_type}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     >
                       <option value="hourly">시급</option>
                       <option value="monthly">월급</option>
@@ -466,9 +517,9 @@ export function EmployeeFormPage() {
                           value={formData.hourly_rate || ''}
                           onChange={handleChange}
                           placeholder="10000"
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12 text-sm sm:text-base"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                           원
                         </span>
                       </div>
@@ -483,9 +534,9 @@ export function EmployeeFormPage() {
                           value={formData.monthly_salary || ''}
                           onChange={handleChange}
                           placeholder="3000000"
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12 text-sm sm:text-base"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                           원
                         </span>
                       </div>
@@ -493,8 +544,8 @@ export function EmployeeFormPage() {
                   )}
                 </div>
                 
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-700">
+                <div className="p-3 sm:p-4 bg-blue-50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-blue-700">
                     <strong>안내:</strong> 시급제 직원은 출퇴근 기록을 기반으로 급여가 자동 계산됩니다.
                     월급제 직원은 고정 월급이 지급됩니다.
                   </p>
@@ -504,12 +555,12 @@ export function EmployeeFormPage() {
 
             {/* 인증 정보 */}
             {activeTab === 'auth' && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <h2 className="text-lg font-semibold text-gray-900">인증 정보</h2>
-                <p className="text-sm text-gray-500">
+                <p className="text-xs sm:text-sm text-gray-500">
                   직원이 키오스크 및 직원 포털에서 로그인할 때 사용하는 비밀번호입니다.
                 </p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       비밀번호 {!isEdit && <span className="text-red-500">*</span>}
@@ -521,7 +572,7 @@ export function EmployeeFormPage() {
                         value={formData.password}
                         onChange={handleChange}
                         placeholder={isEdit ? '변경 시에만 입력' : '4자리 이상'}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10 text-sm sm:text-base"
                       />
                       <button
                         type="button"
@@ -542,12 +593,12 @@ export function EmployeeFormPage() {
                       value={formData.passwordConfirm}
                       onChange={handleChange}
                       placeholder="비밀번호 재입력"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
                     />
                   </div>
                 </div>
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-700">
+                <div className="p-3 sm:p-4 bg-blue-50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-blue-700">
                     <strong>안내:</strong> 비밀번호는 최소 4자리 이상이어야 합니다. 직원은 직원
                     포털에서 비밀번호를 변경할 수 있습니다.
                   </p>
@@ -558,18 +609,18 @@ export function EmployeeFormPage() {
         </div>
 
         {/* 하단 버튼 */}
-        <div className="flex justify-end gap-3 mt-6">
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-4 sm:mt-6">
           <button
             type="button"
             onClick={() => navigate('/employees')}
-            className="px-6 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
+            className="w-full sm:w-auto px-6 py-2.5 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 text-sm sm:text-base"
           >
             취소
           </button>
           <button
             type="submit"
             disabled={isSaving}
-            className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm sm:text-base"
           >
             {isSaving ? (
               <Loader2 size={18} className="animate-spin" />
