@@ -1,5 +1,5 @@
 // =====================================================
-// 키오스크 메인 애플리케이션
+// 키오스크 메인 애플리케이션 (멀티사업장 지원)
 // =====================================================
 
 import { useEffect, useCallback, useState } from 'react';
@@ -18,6 +18,9 @@ import {
   User,
   Loader2,
   RefreshCw,
+  Monitor,
+  Building2,
+  Settings,
 } from 'lucide-react';
 import {
   type Employee,
@@ -28,13 +31,20 @@ import {
   findMatchingEmployee,
   validateAndLogIP,
   getCurrentIP,
+  authenticateKiosk,
 } from './lib/api';
 import { supabase } from './lib/supabase';
 
-const BUSINESS_ID = '00000000-0000-0000-0000-000000000001';
-
 function App() {
   const {
+    // 기기 상태
+    isDeviceRegistered,
+    deviceName,
+    businessId,
+    businessName,
+    registerDevice,
+    unregisterDevice,
+    // 화면 상태
     screen,
     recognizedEmployee,
     errorMessage,
@@ -53,14 +63,22 @@ function App() {
   const [authMethod, setAuthMethod] = useState<'face' | 'password'>('password');
   const [resultMessage, setResultMessage] = useState<string>('');
 
-  // 직원 목록 로드
+  // 기기 등록 관련 상태
+  const [deviceCode, setDeviceCode] = useState('');
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // 직원 목록 로드 (businessId 사용)
   const loadEmployees = useCallback(async () => {
+    if (!businessId) return;
+    
     setLoadingEmployees(true);
     try {
       const { data, error } = await supabase
         .from('employees')
         .select('id, employee_number, name, department, position')
-        .eq('business_id', BUSINESS_ID)
+        .eq('business_id', businessId)
         .eq('is_active', true)
         .order('name');
 
@@ -72,12 +90,14 @@ function App() {
     } finally {
       setLoadingEmployees(false);
     }
-  }, []);
+  }, [businessId]);
 
-  // 초기 직원 목록 로드
+  // 초기 직원 목록 로드 (기기 등록 후)
   useEffect(() => {
-    loadEmployees();
-  }, [loadEmployees]);
+    if (isDeviceRegistered && businessId) {
+      loadEmployees();
+    }
+  }, [isDeviceRegistered, businessId, loadEmployees]);
 
   // 자동 리셋 타이머 (성공: 1.5초, 에러: 2초)
   useEffect(() => {
@@ -108,7 +128,7 @@ function App() {
     setResultMessage('');
   }, [reset]);
 
-  // 비밀번호 입력 완료 시 자동 검증 (eslint 경고 회피를 위해 별도 처리)
+  // 비밀번호 입력 완료 시 자동 검증
   useEffect(() => {
     if (password.length === 4 && selectedEmployee) {
       verifyAndProceed();
@@ -120,10 +140,51 @@ function App() {
     await handlePasswordSubmit();
   };
 
+  // 기기코드 인증
+  const handleDeviceAuth = async () => {
+    if (!deviceCode.trim() || deviceCode.length !== 8) {
+      setAuthError('8자리 기기코드를 입력해주세요');
+      return;
+    }
+
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      const result = await authenticateKiosk(deviceCode.trim().toUpperCase());
+
+      if (result.success && result.device_id) {
+        registerDevice({
+          deviceId: result.device_id,
+          deviceCode: result.device_code!,
+          deviceName: result.device_name!,
+          businessId: result.business_id!,
+          businessName: result.business_name,
+        });
+        setDeviceCode('');
+      } else {
+        setAuthError(result.error || '기기 인증에 실패했습니다');
+      }
+    } catch (err) {
+      console.error('Device auth error:', err);
+      setAuthError('기기 인증 중 오류가 발생했습니다');
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  // 기기 연결 해제
+  const handleDisconnectDevice = () => {
+    if (confirm('기기 연결을 해제하시겠습니까?')) {
+      unregisterDevice();
+      setShowSettings(false);
+    }
+  };
+
   // 얼굴 인식 결과 처리
   const handleFaceDetected = useCallback(
     async (descriptor: Float32Array | null) => {
-      if (!descriptor || isProcessing || screen !== 'detecting') return;
+      if (!descriptor || isProcessing || screen !== 'detecting' || !businessId) return;
 
       setProcessing(true);
       setAuthMethod('face');
@@ -133,7 +194,7 @@ function App() {
         const embeddingArray = Array.from(descriptor);
         
         // 얼굴 매칭 시도
-        const matchedEmployee = await findMatchingEmployee(embeddingArray, 0.6);
+        const matchedEmployee = await findMatchingEmployee(embeddingArray, 0.6, businessId);
 
         if (matchedEmployee) {
           // 오늘 출퇴근 상태 확인
@@ -159,19 +220,19 @@ function App() {
         setProcessing(false);
       }
     },
-    [isProcessing, screen, setProcessing, setRecognizedEmployee, setScreen, setErrorMessage]
+    [isProcessing, screen, businessId, setProcessing, setRecognizedEmployee, setScreen, setErrorMessage]
   );
 
-  // 출퇴근 처리 (Optimistic UI - 즉시 완료 화면 표시 + IP 검증)
+  // 출퇴근 처리 (Optimistic UI)
   const handleCheckInOut = async (type: 'in' | 'out') => {
-    if (!recognizedEmployee) return;
+    if (!recognizedEmployee || !businessId) return;
 
-    // IP 검증 및 로그 기록 (백그라운드에서 실행, 출퇴근은 차단하지 않음)
-    // 비정상 접속 시 관리자 알림만 발송
+    // IP 검증 및 로그 기록 (백그라운드)
     validateAndLogIP(
       recognizedEmployee.id,
       recognizedEmployee.name,
-      type === 'in' ? 'check_in' : 'check_out'
+      type === 'in' ? 'check_in' : 'check_out',
+      businessId
     ).then((ipResult) => {
       if (ipResult.isSuspicious) {
         console.warn(`[보안 경고] 미승인 IP에서 출퇴근 시도: ${ipResult.currentIP}`);
@@ -189,8 +250,8 @@ function App() {
     // 백그라운드에서 DB 저장
     try {
       const result = type === 'in' 
-        ? await checkIn(recognizedEmployee.id, authMethod)
-        : await checkOut(recognizedEmployee.id, authMethod);
+        ? await checkIn(recognizedEmployee.id, authMethod, businessId)
+        : await checkOut(recognizedEmployee.id, authMethod, businessId);
 
       if (!result.success) {
         // 실패 시 에러 화면으로 전환
@@ -240,10 +301,137 @@ function App() {
     }
   };
 
+  // ==========================================
+  // 기기 미등록 시: 기기코드 입력 화면
+  // ==========================================
+  if (!isDeviceRegistered) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-br from-slate-900 to-slate-800">
+        <div className="w-full max-w-md">
+          {/* 로고 */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-primary-600 rounded-2xl shadow-lg mb-4">
+              <Monitor className="text-white" size={40} />
+            </div>
+            <h1 className="text-3xl font-bold text-white">키오스크 설정</h1>
+            <p className="text-white/60 mt-2">기기코드를 입력하여 연결하세요</p>
+          </div>
+
+          {/* 기기코드 입력 */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8">
+            <div className="mb-6">
+              <label className="block text-white/80 text-sm mb-2">기기코드</label>
+              <input
+                type="text"
+                value={deviceCode}
+                onChange={(e) => setDeviceCode(e.target.value.toUpperCase().slice(0, 8))}
+                placeholder="8자리 코드 입력"
+                className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center text-2xl tracking-widest font-mono placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                maxLength={8}
+                disabled={isAuthenticating}
+              />
+              <p className="text-white/40 text-xs text-center mt-2">
+                관리자 페이지에서 발급받은 코드를 입력하세요
+              </p>
+            </div>
+
+            {authError && (
+              <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
+                <p className="text-red-400 text-sm text-center">{authError}</p>
+              </div>
+            )}
+
+            <button
+              onClick={handleDeviceAuth}
+              disabled={isAuthenticating || deviceCode.length !== 8}
+              className="w-full py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+            >
+              {isAuthenticating ? (
+                <>
+                  <Loader2 className="animate-spin" size={24} />
+                  <span>연결 중...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={24} />
+                  <span>연결하기</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* 안내 */}
+          <div className="mt-6 text-center">
+            <p className="text-white/40 text-sm">
+              기기코드는 관리자 페이지 → 설정 → 키오스크 관리에서 발급받을 수 있습니다
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // 기기 등록됨: 기존 키오스크 화면
+  // ==========================================
+
+  // 설정 모달
+  if (showSettings) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center p-8">
+        <div className="kiosk-card max-w-md w-full animate-fadeIn">
+          <h2 className="text-2xl font-bold text-center mb-6">기기 설정</h2>
+          
+          <div className="space-y-4 mb-8">
+            <div className="p-4 bg-white/10 rounded-xl">
+              <p className="text-white/60 text-sm">기기명</p>
+              <p className="text-xl font-semibold">{deviceName}</p>
+            </div>
+            <div className="p-4 bg-white/10 rounded-xl">
+              <p className="text-white/60 text-sm">사업장</p>
+              <p className="text-xl font-semibold">{businessName || '-'}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="w-full kiosk-btn kiosk-btn-primary"
+            >
+              닫기
+            </button>
+            <button
+              onClick={handleDisconnectDevice}
+              className="w-full kiosk-btn bg-red-600 hover:bg-red-700"
+            >
+              기기 연결 해제
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // 대기 화면
   if (screen === 'standby') {
     return (
       <div className="h-screen flex flex-col items-center justify-center p-8">
+        {/* 설정 버튼 */}
+        <button
+          onClick={() => setShowSettings(true)}
+          className="absolute top-4 right-4 p-3 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-lg transition-colors"
+        >
+          <Settings size={24} />
+        </button>
+
+        {/* 사업장 정보 */}
+        {businessName && (
+          <div className="absolute top-4 left-4 flex items-center gap-2 text-white/60">
+            <Building2 size={20} />
+            <span>{businessName}</span>
+          </div>
+        )}
+
         <Clock />
 
         <div className="mt-16 space-y-6 animate-slideUp">
@@ -270,7 +458,7 @@ function App() {
         </div>
 
         <div className="absolute bottom-8 text-white/40 text-sm">
-          출퇴근 관리 시스템 v1.0
+          {deviceName} · 출퇴근 관리 시스템 v1.0
         </div>
       </div>
     );

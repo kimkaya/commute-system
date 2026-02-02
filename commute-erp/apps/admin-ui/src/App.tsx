@@ -11,6 +11,7 @@ import { AppLayout } from './components/layout/AppLayout';
 
 // Pages
 import { LoginPage } from './pages/auth/LoginPage';
+import { RegisterPage } from './pages/auth/RegisterPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { EmployeeListPage } from './pages/employees/EmployeeListPage';
 import { EmployeeFormPage } from './pages/employees/EmployeeFormPage';
@@ -81,8 +82,9 @@ function App() {
         />
         
         <Routes>
-          {/* 로그인 페이지 */}
+{/* 인증 페이지 */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
           {/* 메인 레이아웃 */}
           <Route element={<AppLayout />}>

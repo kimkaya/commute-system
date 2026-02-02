@@ -11,6 +11,7 @@ import { AppLayout } from './components/layout/AppLayout';
 
 // Pages
 import { LoginPage } from './pages/auth/LoginPage';
+import { RegisterPage } from './pages/auth/RegisterPage';
 import { MyAttendancePage } from './pages/attendance/MyAttendancePage';
 import { MyPayrollPage } from './pages/payroll/MyPayrollPage';
 import { MyLeavePage } from './pages/leave/MyLeavePage';
@@ -34,8 +35,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <HashRouter>
         <Routes>
-          {/* 로그인 페이지 */}
+          {/* 인증 페이지 */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
           {/* 메인 레이아웃 */}
           <Route element={<AppLayout />}>

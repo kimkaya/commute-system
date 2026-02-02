@@ -1,9 +1,14 @@
 // =====================================================
-// Employee Portal API 서비스
+// Employee Portal API 서비스 (멀티사업장 지원)
 // =====================================================
 
 import { supabase } from './supabase';
 
+// Supabase URL
+export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || 'https://waazyjqdjdrnvcmymcga.supabase.co').trim();
+export const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhYXp5anFkamRybnZjbXltY2dhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NzU3MTYsImV4cCI6MjA4NTI1MTcxNn0.9h0j2EhMyPZtOo2SWiyJBx5G-SP36QAudlN_yS9OUrU').trim();
+
+// 기본 사업장 ID (레거시 호환용)
 const BUSINESS_ID = '00000000-0000-0000-0000-000000000001';
 
 // =====================================================
@@ -14,6 +19,7 @@ export interface Employee {
   id: string;
   business_id: string;
   employee_number: string | null;
+  username: string | null;
   name: string;
   email: string | null;
   phone: string | null;
@@ -74,7 +80,135 @@ export interface PayrollLine {
 }
 
 // =====================================================
-// 직원 로그인
+// 직원 로그인 (멀티사업장 - 이메일 형식)
+// =====================================================
+
+export interface LoginResponse {
+  success: boolean;
+  employee?: Employee & { business_name?: string; company_code?: string };
+  business_id?: string;
+  business_name?: string;
+  company_code?: string;
+  error?: string;
+}
+
+export async function employeeLoginV2(email: string, password: string): Promise<LoginResponse> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/employee-login-v2`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { success: false, error: data.error || '로그인에 실패했습니다' };
+    }
+
+    return {
+      success: true,
+      employee: data.employee,
+      business_id: data.business_id,
+      business_name: data.business_name,
+      company_code: data.company_code,
+    };
+  } catch (err) {
+    console.error('Login V2 error:', err);
+    return { success: false, error: '로그인 중 오류가 발생했습니다' };
+  }
+}
+
+// =====================================================
+// 초대코드 검증
+// =====================================================
+
+export async function validateInviteCode(inviteCode: string): Promise<{
+  valid: boolean;
+  business_id?: string;
+  business_name?: string;
+  company_code?: string;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/validate-invite-code`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ invite_code: inviteCode }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { valid: false, error: data.error || '유효하지 않은 초대코드입니다' };
+    }
+
+    return {
+      valid: true,
+      business_id: data.business_id,
+      business_name: data.business_name,
+      company_code: data.company_code,
+    };
+  } catch (err) {
+    console.error('Validate invite code error:', err);
+    return { valid: false, error: '초대코드 검증 중 오류가 발생했습니다' };
+  }
+}
+
+// =====================================================
+// 직원 회원가입
+// =====================================================
+
+export interface EmployeeRegisterParams {
+  invite_code: string;
+  username: string;
+  password: string;
+  name: string;
+  phone?: string;
+  email?: string;
+}
+
+export async function employeeRegister(params: EmployeeRegisterParams): Promise<{
+  success: boolean;
+  employee_id?: string;
+  email_format?: string;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/employee-register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify(params),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { success: false, error: data.error || '회원가입에 실패했습니다' };
+    }
+
+    return {
+      success: true,
+      employee_id: data.employee_id,
+      email_format: data.email_format,
+    };
+  } catch (err) {
+    console.error('Employee register error:', err);
+    return { success: false, error: '회원가입 중 오류가 발생했습니다' };
+  }
+}
+
+// =====================================================
+// 직원 로그인 (레거시 - 사원번호 방식)
 // =====================================================
 
 export async function employeeLogin(employeeNumber: string, password: string): Promise<{

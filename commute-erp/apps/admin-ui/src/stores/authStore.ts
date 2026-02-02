@@ -1,5 +1,5 @@
 // =====================================================
-// 인증 상태 관리
+// 인증 상태 관리 (멀티사업장 지원)
 // =====================================================
 
 import { create } from 'zustand';
@@ -8,13 +8,26 @@ import { persist } from 'zustand/middleware';
 interface AuthState {
   isAuthenticated: boolean;
   businessId: string | null;
+  businessName: string | null;
+  companyCode: string | null;
+  adminId: string | null;
   adminName: string | null;
+  adminRole: string | null;
   sessionExpiry: number | null;
   
   // Actions
-  login: (businessId: string, adminName: string, sessionMinutes?: number) => void;
+  login: (params: {
+    businessId: string;
+    businessName?: string;
+    companyCode?: string;
+    adminId?: string;
+    adminName: string;
+    adminRole?: string;
+    sessionMinutes?: number;
+  }) => void;
   logout: () => void;
   checkSession: () => boolean;
+  extendSession: (minutes?: number) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -22,15 +35,24 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       isAuthenticated: false,
       businessId: null,
+      businessName: null,
+      companyCode: null,
+      adminId: null,
       adminName: null,
+      adminRole: null,
       sessionExpiry: null,
 
-      login: (businessId: string, adminName: string, sessionMinutes: number = 30) => {
+      login: (params) => {
+        const sessionMinutes = params.sessionMinutes || 30;
         const expiry = Date.now() + sessionMinutes * 60 * 1000;
         set({
           isAuthenticated: true,
-          businessId,
-          adminName,
+          businessId: params.businessId,
+          businessName: params.businessName || null,
+          companyCode: params.companyCode || null,
+          adminId: params.adminId || null,
+          adminName: params.adminName,
+          adminRole: params.adminRole || 'admin',
           sessionExpiry: expiry,
         });
       },
@@ -39,7 +61,11 @@ export const useAuthStore = create<AuthState>()(
         set({
           isAuthenticated: false,
           businessId: null,
+          businessName: null,
+          companyCode: null,
+          adminId: null,
           adminName: null,
+          adminRole: null,
           sessionExpiry: null,
         });
       },
@@ -55,15 +81,37 @@ export const useAuthStore = create<AuthState>()(
         
         return true;
       },
+
+      extendSession: (minutes = 30) => {
+        const { isAuthenticated } = get();
+        if (!isAuthenticated) return;
+        
+        set({
+          sessionExpiry: Date.now() + minutes * 60 * 1000,
+        });
+      },
     }),
     {
       name: 'commute-erp-auth',
       partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,
         businessId: state.businessId,
+        businessName: state.businessName,
+        companyCode: state.companyCode,
+        adminId: state.adminId,
         adminName: state.adminName,
+        adminRole: state.adminRole,
         sessionExpiry: state.sessionExpiry,
       }),
     }
   )
 );
+
+// 하위 호환성을 위한 헬퍼 함수
+export function getBusinessId(): string {
+  const { businessId, isAuthenticated } = useAuthStore.getState();
+  if (!isAuthenticated || !businessId) {
+    throw new Error('Not authenticated');
+  }
+  return businessId;
+}

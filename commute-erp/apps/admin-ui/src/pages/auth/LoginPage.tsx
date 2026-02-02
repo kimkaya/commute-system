@@ -1,19 +1,36 @@
 // =====================================================
-// 로그인 페이지
+// 관리자 로그인 페이지 (이메일 형식)
 // =====================================================
 
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Clock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { Clock, Eye, EyeOff, Loader2, Mail, Lock } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
-import { adminLogin } from '../../lib/api';
+import { invokeFunction } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+
+interface LoginResponse {
+  success: boolean;
+  businessId: string;
+  businessName: string;
+  companyCode: string;
+  adminId: string;
+  adminName: string;
+  adminRole: string;
+  sessionTimeout: number;
+  error?: string;
+  message?: string;
+  locked?: boolean;
+  failCount?: number;
+  maxFailCount?: number;
+}
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticated } = useAuthStore();
 
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,29 +46,56 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!email) {
+      toast.error('이메일을 입력하세요');
+      return;
+    }
+
     if (!password) {
       toast.error('비밀번호를 입력하세요');
+      return;
+    }
+
+    // 이메일 형식 검증
+    if (!email.includes('@') || !email.endsWith('.com')) {
+      toast.error('올바른 이메일 형식으로 입력하세요 (예: admin@company.com)');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const result = await adminLogin(password);
+      const { data, error } = await invokeFunction<LoginResponse>('admin-login-v2', {
+        email: email.toLowerCase(),
+        password,
+      });
 
-      if (result.success) {
-        login('00000000-0000-0000-0000-000000000001', '관리자', 30);
-        toast.success('로그인 성공');
+      if (error) {
+        toast.error('서버 오류가 발생했습니다');
+        return;
+      }
+
+      if (data?.success) {
+        login({
+          businessId: data.businessId,
+          businessName: data.businessName,
+          companyCode: data.companyCode,
+          adminId: data.adminId,
+          adminName: data.adminName,
+          adminRole: data.adminRole,
+          sessionMinutes: data.sessionTimeout,
+        });
+        toast.success(`${data.businessName}에 로그인되었습니다`);
         const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
         navigate(from, { replace: true });
       } else {
-        const newFailCount = failCount + 1;
+        const newFailCount = data?.failCount || failCount + 1;
         setFailCount(newFailCount);
 
-        if (newFailCount >= 5) {
-          toast.error('5회 실패! 30분간 계정이 잠깁니다.');
+        if (data?.locked) {
+          toast.error(data.message || '계정이 잠겼습니다');
         } else {
-          toast.error(result.error || `비밀번호가 틀렸습니다. (${newFailCount}/5)`);
+          toast.error(data?.message || data?.error || '로그인에 실패했습니다');
         }
       }
     } catch (error) {
@@ -76,22 +120,45 @@ export function LoginPage() {
 
         {/* 로그인 폼 */}
         <div className="card p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* 이메일 입력 */}
+            <div>
+              <label htmlFor="email" className="label">
+                이메일
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input pl-10"
+                  placeholder="admin@회사코드.com"
+                  disabled={isLoading}
+                  autoFocus
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                예: admin@demo.com
+              </p>
+            </div>
+
             {/* 비밀번호 입력 */}
             <div>
               <label htmlFor="password" className="label">
-                관리자 비밀번호
+                비밀번호
               </label>
               <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   id="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input pr-10"
+                  className="input pl-10 pr-10"
                   placeholder="비밀번호를 입력하세요"
-                  disabled={isLoading || failCount >= 5}
-                  autoFocus
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
@@ -107,7 +174,7 @@ export function LoginPage() {
             <button
               type="submit"
               className="btn btn-primary w-full py-3"
-              disabled={isLoading || failCount >= 5}
+              disabled={isLoading}
             >
               {isLoading ? (
                 <>
@@ -125,22 +192,26 @@ export function LoginPage() {
                 로그인 실패 {failCount}회 / 5회
               </p>
             )}
-
-            {failCount >= 5 && (
-              <p className="text-sm text-danger-500 text-center">
-                계정이 잠겼습니다. 30분 후에 다시 시도하세요.
-              </p>
-            )}
           </form>
 
-          {/* 안내 */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <p className="text-xs text-gray-500 text-center">
-              기본 비밀번호: admin1234
-              <br />
-              (데모 버전)
+          {/* 회원가입 링크 */}
+          <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+            <p className="text-sm text-gray-600">
+              계정이 없으신가요?{' '}
+              <Link to="/register" className="text-primary-600 font-medium hover:underline">
+                회원가입
+              </Link>
             </p>
           </div>
+        </div>
+
+        {/* 데모 안내 */}
+        <div className="mt-6 p-4 bg-white/80 rounded-xl text-center">
+          <p className="text-sm text-gray-600 font-medium mb-2">데모 계정</p>
+          <p className="text-xs text-gray-500">
+            이메일: admin@demo.com<br />
+            비밀번호: admin1234
+          </p>
         </div>
 
         {/* 푸터 */}

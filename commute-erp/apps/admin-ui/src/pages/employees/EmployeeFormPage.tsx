@@ -15,6 +15,7 @@ import {
   EyeOff,
   Loader2,
   ChevronDown,
+  Calculator,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getEmployee, createEmployee, updateEmployee, createEmployeeCredentials } from '../../lib/api';
@@ -47,6 +48,16 @@ interface EmployeeFormData {
   salary_type: 'hourly' | 'monthly';
   password: string;
   passwordConfirm: string;
+  // 세금 설정
+  dependents_count: number;
+  children_under_20: number;
+  income_tax_override: string;
+  tax_free_meals: number;
+  tax_free_car_allowance: number;
+  tax_free_other: number;
+  national_pension_exempt: boolean;
+  health_insurance_exempt: boolean;
+  employment_insurance_exempt: boolean;
 }
 
 const initialFormData: EmployeeFormData = {
@@ -63,6 +74,16 @@ const initialFormData: EmployeeFormData = {
   salary_type: 'hourly',
   password: '',
   passwordConfirm: '',
+  // 세금 설정 기본값
+  dependents_count: 1,
+  children_under_20: 0,
+  income_tax_override: '',
+  tax_free_meals: 200000,
+  tax_free_car_allowance: 0,
+  tax_free_other: 0,
+  national_pension_exempt: false,
+  health_insurance_exempt: false,
+  employment_insurance_exempt: false,
 };
 
 export function EmployeeFormPage() {
@@ -73,7 +94,7 @@ export function EmployeeFormPage() {
 
   const [formData, setFormData] = useState<EmployeeFormData>(initialFormData);
   const [showPassword, setShowPassword] = useState(false);
-  const [activeTab, setActiveTab] = useState<'basic' | 'job' | 'salary' | 'auth'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'job' | 'salary' | 'tax' | 'auth'>('basic');
   const [showMobileTabMenu, setShowMobileTabMenu] = useState(false);
 
   // 기존 직원 데이터 로드 (수정 모드)
@@ -100,6 +121,16 @@ export function EmployeeFormPage() {
         salary_type: existingEmployee.salary_type || 'hourly',
         password: '',
         passwordConfirm: '',
+        // 세금 설정
+        dependents_count: existingEmployee.dependents_count || 1,
+        children_under_20: existingEmployee.children_under_20 || 0,
+        income_tax_override: existingEmployee.income_tax_override?.toString() || '',
+        tax_free_meals: existingEmployee.tax_free_meals || 200000,
+        tax_free_car_allowance: existingEmployee.tax_free_car_allowance || 0,
+        tax_free_other: existingEmployee.tax_free_other || 0,
+        national_pension_exempt: existingEmployee.national_pension_exempt || false,
+        health_insurance_exempt: existingEmployee.health_insurance_exempt || false,
+        employment_insurance_exempt: existingEmployee.employment_insurance_exempt || false,
       });
     }
   }, [existingEmployee]);
@@ -120,6 +151,16 @@ export function EmployeeFormPage() {
         monthly_salary: data.monthly_salary || null,
         salary_type: data.salary_type,
         is_active: true,
+        // 세금 설정
+        dependents_count: data.dependents_count,
+        children_under_20: data.children_under_20,
+        income_tax_override: data.income_tax_override ? parseFloat(data.income_tax_override) : null,
+        tax_free_meals: data.tax_free_meals,
+        tax_free_car_allowance: data.tax_free_car_allowance,
+        tax_free_other: data.tax_free_other,
+        national_pension_exempt: data.national_pension_exempt,
+        health_insurance_exempt: data.health_insurance_exempt,
+        employment_insurance_exempt: data.employment_insurance_exempt,
       });
       
       // 비밀번호 설정
@@ -155,6 +196,16 @@ export function EmployeeFormPage() {
         hourly_rate: data.hourly_rate,
         monthly_salary: data.monthly_salary || null,
         salary_type: data.salary_type,
+        // 세금 설정
+        dependents_count: data.dependents_count,
+        children_under_20: data.children_under_20,
+        income_tax_override: data.income_tax_override ? parseFloat(data.income_tax_override) : null,
+        tax_free_meals: data.tax_free_meals,
+        tax_free_car_allowance: data.tax_free_car_allowance,
+        tax_free_other: data.tax_free_other,
+        national_pension_exempt: data.national_pension_exempt,
+        health_insurance_exempt: data.health_insurance_exempt,
+        employment_insurance_exempt: data.employment_insurance_exempt,
       });
       
       // 비밀번호 변경
@@ -243,6 +294,7 @@ export function EmployeeFormPage() {
     { id: 'basic', label: '기본 정보', icon: User },
     { id: 'job', label: '직무 정보', icon: Briefcase },
     { id: 'salary', label: '급여 정보', icon: CreditCard },
+    { id: 'tax', label: '세금 설정', icon: Calculator },
     { id: 'auth', label: '인증 정보', icon: Eye },
   ];
 
@@ -549,6 +601,176 @@ export function EmployeeFormPage() {
                     <strong>안내:</strong> 시급제 직원은 출퇴근 기록을 기반으로 급여가 자동 계산됩니다.
                     월급제 직원은 고정 월급이 지급됩니다.
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* 세금 설정 */}
+            {activeTab === 'tax' && (
+              <div className="space-y-4 sm:space-y-6">
+                <h2 className="text-lg font-semibold text-gray-900">세금 설정</h2>
+                <p className="text-xs sm:text-sm text-gray-500">
+                  개인별 소득세 계산에 필요한 정보입니다. 간이세액표 기준으로 자동 계산됩니다.
+                </p>
+                
+                {/* 부양가족 */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-800 mb-3">부양가족 정보</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        부양가족 수 (본인 포함)
+                      </label>
+                      <select
+                        name="dependents_count"
+                        value={formData.dependents_count}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
+                      >
+                        {[1,2,3,4,5,6,7,8,9,10,11].map(n => (
+                          <option key={n} value={n}>{n}명{n >= 11 ? ' 이상' : ''}</option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        본인 + 배우자 + 부양가족 (부모, 자녀 등)
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        20세 이하 자녀 수
+                      </label>
+                      <select
+                        name="children_under_20"
+                        value={formData.children_under_20}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm sm:text-base"
+                      >
+                        {[0,1,2,3,4,5].map(n => (
+                          <option key={n} value={n}>{n}명</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 비과세 항목 */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-800 mb-3">비과세 항목 (월)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        식대
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          name="tax_free_meals"
+                          value={formData.tax_free_meals}
+                          onChange={handleChange}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12 text-sm"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">원</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">최대 20만원 비과세</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        자가운전보조금
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          name="tax_free_car_allowance"
+                          value={formData.tax_free_car_allowance}
+                          onChange={handleChange}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12 text-sm"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">원</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">최대 20만원 비과세</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        기타 비과세
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          name="tax_free_other"
+                          value={formData.tax_free_other}
+                          onChange={handleChange}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-12 text-sm"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">원</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 세율 오버라이드 */}
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <h3 className="text-sm font-medium text-yellow-800 mb-3">세율 수동 설정 (선택)</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      소득세율 직접 입력
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        name="income_tax_override"
+                        value={formData.income_tax_override}
+                        onChange={handleChange}
+                        placeholder="비워두면 자동계산"
+                        step="0.001"
+                        min="0"
+                        max="0.5"
+                        className="w-32 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                      />
+                      <span className="text-sm text-gray-600">
+                        (예: 0.04 = 4%)
+                      </span>
+                    </div>
+                    <p className="text-xs text-yellow-700 mt-2">
+                      ⚠️ 세무사 확인 후 입력하세요. 비워두면 간이세액표 기준으로 자동 계산됩니다.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4대보험 면제 */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-800 mb-3">4대보험 가입 제외</h3>
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="national_pension_exempt"
+                        checked={formData.national_pension_exempt}
+                        onChange={(e) => setFormData(prev => ({ ...prev, national_pension_exempt: e.target.checked }))}
+                        className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">국민연금 제외 (60세 이상, 외국인 등)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="health_insurance_exempt"
+                        checked={formData.health_insurance_exempt}
+                        onChange={(e) => setFormData(prev => ({ ...prev, health_insurance_exempt: e.target.checked }))}
+                        className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">건강보험 제외 (피부양자, 외국인 등)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="employment_insurance_exempt"
+                        checked={formData.employment_insurance_exempt}
+                        onChange={(e) => setFormData(prev => ({ ...prev, employment_insurance_exempt: e.target.checked }))}
+                        className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">고용보험 제외 (65세 이상 등)</span>
+                    </label>
+                  </div>
                 </div>
               </div>
             )}

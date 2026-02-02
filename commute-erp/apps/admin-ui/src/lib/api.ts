@@ -6,6 +6,9 @@ import { supabase } from './supabase';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
+// Supabase URL (Edge Functions 호출용)
+export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || 'https://waazyjqdjdrnvcmymcga.supabase.co').trim();
+
 // 기본 사업장 ID (단일 테넌트 모드)
 const BUSINESS_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -30,6 +33,16 @@ export interface Employee {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // 세금 관련 필드
+  dependents_count?: number;           // 부양가족 수 (본인 포함)
+  children_under_20?: number;          // 20세 이하 자녀 수
+  income_tax_override?: number | null; // 세율 수동 오버라이드
+  tax_free_meals?: number;             // 비과세 식대
+  tax_free_car_allowance?: number;     // 비과세 자가운전보조금
+  tax_free_other?: number;             // 기타 비과세
+  national_pension_exempt?: boolean;   // 국민연금 제외
+  health_insurance_exempt?: boolean;   // 건강보험 제외
+  employment_insurance_exempt?: boolean; // 고용보험 제외
 }
 
 export interface AttendanceRecord {
@@ -869,12 +882,17 @@ export interface PayrollCalculation {
   basePay: number;
   overtimePay: number;
   grossPay: number;
+  taxableIncome: number;
+  taxFreeAmount: number;
   incomeTax: number;
+  localTax: number;
   healthInsurance: number;
+  longTermCare: number;
   nationalPension: number;
   employmentInsurance: number;
   totalDeductions: number;
   netPay: number;
+  dependentsCount: number;
 }
 
 // 특정 기간의 출퇴근 기록을 기반으로 급여 계산
@@ -937,13 +955,8 @@ export async function calculatePayroll(year: number, month: number): Promise<Pay
     const overtimePay = Math.round(overtimeHours * hourlyRate * overtimeRate);
     const grossPay = basePay + overtimePay;
 
-    // 공제 계산 (간이세액표 기준 간략화)
-    const incomeTax = Math.round(grossPay * 0.04); // 소득세 약 4%
-    const healthInsurance = Math.round(grossPay * 0.03545); // 건강보험 3.545%
-    const nationalPension = Math.round(grossPay * 0.045); // 국민연금 4.5%
-    const employmentInsurance = Math.round(grossPay * 0.009); // 고용보험 0.9%
-    const totalDeductions = incomeTax + healthInsurance + nationalPension + employmentInsurance;
-    const netPay = grossPay - totalDeductions;
+    // 개인별 세금 계산 (간이세액표 기반)
+    const taxes = await calculateEmployeeTaxes(grossPay, employee);
 
     calculations.push({
       employeeId: employee.id,
@@ -958,12 +971,17 @@ export async function calculatePayroll(year: number, month: number): Promise<Pay
       basePay,
       overtimePay,
       grossPay,
-      incomeTax,
-      healthInsurance,
-      nationalPension,
-      employmentInsurance,
-      totalDeductions,
-      netPay,
+      taxableIncome: taxes.taxableIncome,
+      taxFreeAmount: taxes.taxFreeAmount,
+      incomeTax: taxes.incomeTax,
+      localTax: taxes.localTax,
+      healthInsurance: taxes.healthInsurance,
+      longTermCare: taxes.longTermCare,
+      nationalPension: taxes.nationalPension,
+      employmentInsurance: taxes.employmentInsurance,
+      totalDeductions: taxes.totalDeductions,
+      netPay: taxes.netPay,
+      dependentsCount: employee.dependents_count || 1,
     });
   }
 
@@ -1215,7 +1233,7 @@ export function saveTaxSettings(settings: TaxSettings): void {
   }
 }
 
-// 세금 계산 함수 (커스텀 세율 적용)
+// 세금 계산 함수 (커스텀 세율 적용 - 레거시)
 export function calculateTaxes(grossPay: number, settings?: TaxSettings) {
   const s = settings || getTaxSettings();
   
@@ -1230,6 +1248,174 @@ export function calculateTaxes(grossPay: number, settings?: TaxSettings) {
   const netPay = grossPay - totalDeductions;
   
   return {
+    incomeTax,
+    localTax,
+    nationalPension,
+    healthInsurance,
+    longTermCare,
+    employmentInsurance,
+    totalDeductions,
+    netPay,
+  };
+}
+
+// =====================================================
+// 간이세액표 기반 세금 계산 (개인별)
+// =====================================================
+
+export interface IncomeTaxTableRow {
+  id: number;
+  min_salary: number;
+  max_salary: number;
+  dependents_1: number;
+  dependents_2: number;
+  dependents_3: number;
+  dependents_4: number;
+  dependents_5: number;
+  dependents_6: number;
+  dependents_7: number;
+  dependents_8: number;
+  dependents_9: number;
+  dependents_10: number;
+  dependents_11_plus: number;
+  year: number;
+}
+
+// 간이세액표 캐시 (세션 동안 유지)
+let incomeTaxTableCache: IncomeTaxTableRow[] | null = null;
+
+// 간이세액표 조회
+export async function getIncomeTaxTable(): Promise<IncomeTaxTableRow[]> {
+  if (incomeTaxTableCache) {
+    return incomeTaxTableCache;
+  }
+  
+  const { data, error } = await supabase
+    .from('income_tax_table')
+    .select('*')
+    .eq('year', 2024)
+    .order('min_salary', { ascending: true });
+  
+  if (error) {
+    console.error('Failed to load income tax table:', error);
+    return [];
+  }
+  
+  incomeTaxTableCache = data || [];
+  return incomeTaxTableCache;
+}
+
+// 간이세액표에서 소득세 조회
+export async function lookupIncomeTax(
+  monthlyTaxableIncome: number,
+  dependentsCount: number
+): Promise<number> {
+  const taxTable = await getIncomeTaxTable();
+  
+  // 해당 급여 구간 찾기
+  const row = taxTable.find(
+    r => monthlyTaxableIncome >= r.min_salary && monthlyTaxableIncome < r.max_salary
+  );
+  
+  if (!row) {
+    // 테이블에 없으면 최고 구간 또는 0
+    const lastRow = taxTable[taxTable.length - 1];
+    if (lastRow && monthlyTaxableIncome >= lastRow.min_salary) {
+      return getDependentsTax(lastRow, dependentsCount);
+    }
+    return 0;
+  }
+  
+  return getDependentsTax(row, dependentsCount);
+}
+
+// 부양가족 수에 따른 세액 반환
+function getDependentsTax(row: IncomeTaxTableRow, dependentsCount: number): number {
+  if (dependentsCount <= 0) dependentsCount = 1;
+  
+  switch (dependentsCount) {
+    case 1: return row.dependents_1;
+    case 2: return row.dependents_2;
+    case 3: return row.dependents_3;
+    case 4: return row.dependents_4;
+    case 5: return row.dependents_5;
+    case 6: return row.dependents_6;
+    case 7: return row.dependents_7;
+    case 8: return row.dependents_8;
+    case 9: return row.dependents_9;
+    case 10: return row.dependents_10;
+    default: return row.dependents_11_plus;
+  }
+}
+
+// 개인별 세금 계산 (간이세액표 + 4대보험)
+export async function calculateEmployeeTaxes(
+  grossPay: number,
+  employee: Employee,
+  settings?: TaxSettings
+): Promise<{
+  taxableIncome: number;
+  taxFreeAmount: number;
+  incomeTax: number;
+  localTax: number;
+  nationalPension: number;
+  healthInsurance: number;
+  longTermCare: number;
+  employmentInsurance: number;
+  totalDeductions: number;
+  netPay: number;
+}> {
+  const s = settings || getTaxSettings();
+  
+  // 비과세 금액 계산
+  const taxFreeAmount = (employee.tax_free_meals || 0) + 
+                        (employee.tax_free_car_allowance || 0) + 
+                        (employee.tax_free_other || 0);
+  
+  // 과세대상 급여 = 총급여 - 비과세
+  const taxableIncome = Math.max(0, grossPay - taxFreeAmount);
+  
+  // 소득세 계산
+  let incomeTax: number;
+  
+  if (employee.income_tax_override !== null && employee.income_tax_override !== undefined) {
+    // 수동 세율 오버라이드가 있는 경우
+    incomeTax = Math.round(taxableIncome * employee.income_tax_override);
+  } else {
+    // 간이세액표에서 조회
+    const dependentsCount = employee.dependents_count || 1;
+    incomeTax = await lookupIncomeTax(taxableIncome, dependentsCount);
+  }
+  
+  // 지방소득세 (소득세의 10%)
+  const localTax = Math.round(incomeTax * 0.1);
+  
+  // 4대보험 계산 (면제 여부 확인)
+  let nationalPension = 0;
+  if (!employee.national_pension_exempt) {
+    // 국민연금: 기준소득월액 상하한 적용
+    const pensionBase = Math.min(Math.max(taxableIncome, 370000), 5900000);
+    nationalPension = Math.round(pensionBase * s.nationalPensionRate);
+  }
+  
+  let healthInsurance = 0;
+  let longTermCare = 0;
+  if (!employee.health_insurance_exempt) {
+    healthInsurance = Math.round(taxableIncome * s.healthInsuranceRate);
+    longTermCare = Math.round(healthInsurance * s.longTermCareRate);
+  }
+  
+  let employmentInsurance = 0;
+  if (!employee.employment_insurance_exempt) {
+    employmentInsurance = Math.round(taxableIncome * s.employmentInsuranceRate);
+  }
+  
+  const totalDeductions = incomeTax + localTax + nationalPension + healthInsurance + longTermCare + employmentInsurance;
+  const netPay = grossPay - totalDeductions;
+  
+  return {
+    taxableIncome,
+    taxFreeAmount,
     incomeTax,
     localTax,
     nationalPension,

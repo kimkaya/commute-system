@@ -37,6 +37,7 @@ import {
   downloadPayslipsZip,
   convertPayrollToExcelData,
 } from '../../lib/api';
+import { PayslipModal } from '../../components/payroll/PayslipModal';
 import type {
   PayrollPeriod,
   PayrollLine as ApiPayrollLine,
@@ -75,10 +76,17 @@ export function PayrollListPage() {
   const [currentPeriodId, setCurrentPeriodId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  // 세금 서류 다운로드 모달
+// 세금 서류 다운로드 모달
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [excelTemplates, setExcelTemplates] = useState<ExcelTemplate[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
+  
+  // 급여명세서 모달
+  const [showPayslipModal, setShowPayslipModal] = useState(false);
+  const [selectedPayslipEmployee, setSelectedPayslipEmployee] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   // API에서 급여 데이터 로드
   const loadPayrollData = useCallback(async () => {
@@ -660,13 +668,19 @@ export function PayrollListPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <Link
-                        to={`/payroll/${selectedYear}/${selectedMonth}/${line.employeeId}`}
+                      <button
+                        onClick={() => {
+                          setSelectedPayslipEmployee({
+                            id: line.employeeId,
+                            name: line.employeeName,
+                          });
+                          setShowPayslipModal(true);
+                        }}
                         className="btn btn-ghost btn-sm"
                         title="급여명세서 보기"
                       >
                         <FileText size={16} />
-                      </Link>
+                      </button>
                       <button
                         onClick={() => {
                           const rawLine = rawPayrollLines.find(r => r.id === line.id);
@@ -822,13 +836,19 @@ export function PayrollListPage() {
                   <p className="text-lg font-bold text-primary-600">{formatCurrency(line.netPay)}</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Link
-                    to={`/payroll/${selectedYear}/${selectedMonth}/${line.employeeId}`}
+                  <button
+                    onClick={() => {
+                      setSelectedPayslipEmployee({
+                        id: line.employeeId,
+                        name: line.employeeName,
+                      });
+                      setShowPayslipModal(true);
+                    }}
                     className="btn btn-ghost btn-sm"
                     title="급여명세서 보기"
                   >
                     <FileText size={16} />
-                  </Link>
+                  </button>
                   <button
                     onClick={() => {
                       const rawLine = rawPayrollLines.find(r => r.id === line.id);
@@ -1013,6 +1033,21 @@ export function PayrollListPage() {
           </div>
         </div>
         </div>
+      )}
+
+      {/* 급여명세서 모달 */}
+      {showPayslipModal && selectedPayslipEmployee && (
+        <PayslipModal
+          isOpen={showPayslipModal}
+          onClose={() => {
+            setShowPayslipModal(false);
+            setSelectedPayslipEmployee(null);
+          }}
+          employeeId={selectedPayslipEmployee.id}
+          employeeName={selectedPayslipEmployee.name}
+          year={selectedYear}
+          month={selectedMonth}
+        />
       )}
     </div>
   );

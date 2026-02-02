@@ -26,6 +26,10 @@ import {
   Loader2,
   Info,
   AlertCircle,
+  Copy,
+  RefreshCw,
+  UserPlus,
+  Monitor,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -38,11 +42,13 @@ import {
   saveSecuritySettings,
   getNotificationSettings,
   saveNotificationSettings,
+  SUPABASE_URL,
 } from '../../lib/api';
 import type { TaxSettings, ExcelTemplate, TemplateCellMapping, SecuritySettings, NotificationSettings } from '../../lib/api';
+import { useAuthStore } from '../../stores/authStore';
 
 // 설정 섹션
-type SettingSection = 'company' | 'work' | 'tax' | 'templates' | 'notification' | 'security' | 'backup' | 'admin';
+type SettingSection = 'company' | 'work' | 'tax' | 'templates' | 'notification' | 'security' | 'backup' | 'admin' | 'invite' | 'kiosk';
 
 // 관리자 목록 (데모)
 const adminUsers = [
@@ -104,9 +110,193 @@ export function SettingsPage() {
   // 보안 설정
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>(getSecuritySettings());
 
+  // 초대코드 상태
+  const [inviteCode, setInviteCode] = useState<string>('');
+  const [isLoadingInviteCode, setIsLoadingInviteCode] = useState(false);
+  const [isRegeneratingCode, setIsRegeneratingCode] = useState(false);
+  
+  // 키오스크 기기 상태
+  interface KioskDevice {
+    id: string;
+    device_code: string;
+    device_name: string;
+    location: string;
+    is_registered: boolean;
+    last_active_at: string | null;
+    created_at: string;
+  }
+  const [kioskDevices, setKioskDevices] = useState<KioskDevice[]>([]);
+  const [isLoadingKiosks, setIsLoadingKiosks] = useState(false);
+  const [showAddKioskModal, setShowAddKioskModal] = useState(false);
+  const [newKioskName, setNewKioskName] = useState('');
+  const [newKioskLocation, setNewKioskLocation] = useState('');
+  const [isAddingKiosk, setIsAddingKiosk] = useState(false);
+
+  // Auth store에서 businessId 가져오기
+  const { businessId } = useAuthStore();
+
   useEffect(() => {
     setTemplates(getExcelTemplates());
   }, []);
+
+  // 초대코드 로드
+  useEffect(() => {
+    if (activeSection === 'invite' && businessId) {
+      loadInviteCode();
+    }
+  }, [activeSection, businessId]);
+
+  // 키오스크 목록 로드
+  useEffect(() => {
+    if (activeSection === 'kiosk' && businessId) {
+      loadKioskDevices();
+    }
+  }, [activeSection, businessId]);
+
+  const loadInviteCode = async () => {
+    if (!businessId) return;
+    setIsLoadingInviteCode(true);
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/businesses?id=eq.${businessId}&select=invite_code`, {
+        headers: {
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      if (data && data.length > 0) {
+        setInviteCode(data[0].invite_code || '');
+      }
+    } catch (error) {
+      console.error('Failed to load invite code:', error);
+      toast.error('초대코드를 불러오는데 실패했습니다');
+    } finally {
+      setIsLoadingInviteCode(false);
+    }
+  };
+
+  const handleRegenerateInviteCode = async () => {
+    if (!businessId) return;
+    setIsRegeneratingCode(true);
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/regenerate-invite-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
+        },
+        body: JSON.stringify({ business_id: businessId }),
+      });
+      
+      const data = await response.json();
+      if (response.ok) {
+        setInviteCode(data.invite_code);
+        toast.success('새 초대코드가 발급되었습니다');
+      } else {
+        throw new Error(data.error || '초대코드 재발급 실패');
+      }
+    } catch (error: any) {
+      console.error('Failed to regenerate invite code:', error);
+      toast.error(error.message || '초대코드 재발급에 실패했습니다');
+    } finally {
+      setIsRegeneratingCode(false);
+    }
+  };
+
+  const handleCopyInviteCode = () => {
+    if (inviteCode) {
+      navigator.clipboard.writeText(inviteCode);
+      toast.success('초대코드가 복사되었습니다');
+    }
+  };
+
+  const loadKioskDevices = async () => {
+    if (!businessId) return;
+    setIsLoadingKiosks(true);
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/kiosk_devices?business_id=eq.${businessId}&order=created_at.desc`, {
+        headers: {
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      setKioskDevices(data || []);
+    } catch (error) {
+      console.error('Failed to load kiosk devices:', error);
+      toast.error('키오스크 목록을 불러오는데 실패했습니다');
+    } finally {
+      setIsLoadingKiosks(false);
+    }
+  };
+
+  const handleAddKiosk = async () => {
+    if (!businessId || !newKioskName.trim()) {
+      toast.error('기기명을 입력해주세요');
+      return;
+    }
+    
+    setIsAddingKiosk(true);
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/register-kiosk-device`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
+        },
+        body: JSON.stringify({
+          business_id: businessId,
+          device_name: newKioskName.trim(),
+          location: newKioskLocation.trim() || null,
+        }),
+      });
+      
+      const data = await response.json();
+      if (response.ok) {
+        toast.success(`키오스크가 등록되었습니다. 기기코드: ${data.device_code}`);
+        setShowAddKioskModal(false);
+        setNewKioskName('');
+        setNewKioskLocation('');
+        loadKioskDevices();
+      } else {
+        throw new Error(data.error || '키오스크 등록 실패');
+      }
+    } catch (error: any) {
+      console.error('Failed to add kiosk:', error);
+      toast.error(error.message || '키오스크 등록에 실패했습니다');
+    } finally {
+      setIsAddingKiosk(false);
+    }
+  };
+
+  const handleDeleteKiosk = async (deviceId: string) => {
+    if (!confirm('이 키오스크를 삭제하시겠습니까?')) return;
+    
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/kiosk_devices?id=eq.${deviceId}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        toast.success('키오스크가 삭제되었습니다');
+        loadKioskDevices();
+      } else {
+        throw new Error('삭제 실패');
+      }
+    } catch (error) {
+      console.error('Failed to delete kiosk:', error);
+      toast.error('키오스크 삭제에 실패했습니다');
+    }
+  };
+
+  const handleCopyDeviceCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    toast.success('기기코드가 복사되었습니다');
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -224,6 +414,8 @@ export function SettingsPage() {
     { id: 'work', label: '근무 설정', icon: Clock },
     { id: 'tax', label: '세금/공제 설정', icon: Calculator },
     { id: 'templates', label: 'Excel 템플릿', icon: FileSpreadsheet },
+    { id: 'invite', label: '직원 초대', icon: UserPlus },
+    { id: 'kiosk', label: '키오스크 관리', icon: Monitor },
     { id: 'notification', label: '알림 설정', icon: Bell },
     { id: 'security', label: '보안 설정', icon: Shield },
     { id: 'backup', label: '백업 관리', icon: Database },
@@ -663,6 +855,176 @@ export function SettingsPage() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* 직원 초대 */}
+          {activeSection === 'invite' && (
+            <div className="space-y-4 sm:space-y-6">
+              <div>
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900">직원 초대</h2>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                  직원이 회원가입 시 초대코드를 입력하면 자동으로 이 사업장에 소속됩니다
+                </p>
+              </div>
+
+              {/* 초대코드 표시 */}
+              <div className="border border-gray-200 rounded-lg p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">초대코드</p>
+                    {isLoadingInviteCode ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 size={20} className="animate-spin text-gray-400" />
+                        <span className="text-gray-400">로딩 중...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl sm:text-3xl font-mono font-bold text-primary-600 tracking-wider">
+                          {inviteCode || '---'}
+                        </span>
+                        <button
+                          onClick={handleCopyInviteCode}
+                          disabled={!inviteCode}
+                          className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="복사"
+                        >
+                          <Copy size={20} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleRegenerateInviteCode}
+                    disabled={isRegeneratingCode || !businessId}
+                    className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors text-sm"
+                  >
+                    {isRegeneratingCode ? (
+                      <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={18} />
+                    )}
+                    새 코드 발급
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-4">
+                  ⚠️ 새 코드를 발급하면 이전 코드는 더 이상 사용할 수 없습니다
+                </p>
+              </div>
+
+              {/* 초대 방법 안내 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="font-medium text-blue-900 mb-2 text-sm sm:text-base">직원 초대 방법</h3>
+                <ol className="list-decimal list-inside text-xs sm:text-sm text-blue-800 space-y-2">
+                  <li>위의 초대코드를 복사하세요</li>
+                  <li>직원에게 초대코드를 전달하세요 (카톡, 문자 등)</li>
+                  <li>직원은 Employee Portal에서 회원가입 시 초대코드를 입력합니다</li>
+                  <li>가입이 완료되면 직원이 자동으로 이 사업장에 등록됩니다</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {/* 키오스크 관리 */}
+          {activeSection === 'kiosk' && (
+            <div className="space-y-4 sm:space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base sm:text-lg font-semibold text-gray-900">키오스크 관리</h2>
+                  <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                    출퇴근 체크용 키오스크 기기를 등록하고 관리합니다
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowAddKioskModal(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm w-full sm:w-auto"
+                >
+                  <Plus size={18} />
+                  키오스크 등록
+                </button>
+              </div>
+
+              {/* 키오스크 목록 */}
+              {isLoadingKiosks ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 size={32} className="animate-spin text-gray-400" />
+                </div>
+              ) : kioskDevices.length === 0 ? (
+                <div className="text-center py-8 sm:py-12 bg-gray-50 rounded-lg">
+                  <Monitor size={40} className="mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-500 text-sm">등록된 키오스크가 없습니다</p>
+                  <p className="text-xs text-gray-400 mt-1">위의 "키오스크 등록" 버튼으로 기기를 추가하세요</p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:gap-4">
+                  {kioskDevices.map((device) => (
+                    <div key={device.id} className="border border-gray-200 rounded-lg p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                            device.is_registered ? 'bg-green-100' : 'bg-yellow-100'
+                          }`}>
+                            <Monitor className={device.is_registered ? 'text-green-600' : 'text-yellow-600'} size={20} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-medium text-gray-900 text-sm sm:text-base">{device.device_name}</h3>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                device.is_registered 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : 'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {device.is_registered ? '연결됨' : '대기 중'}
+                              </span>
+                            </div>
+                            {device.location && (
+                              <p className="text-xs sm:text-sm text-gray-500">{device.location}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-gray-400">기기코드:</span>
+                              <code className="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded">
+                                {device.device_code}
+                              </code>
+                              <button
+                                onClick={() => handleCopyDeviceCode(device.device_code)}
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                                title="복사"
+                              >
+                                <Copy size={14} />
+                              </button>
+                            </div>
+                            {device.last_active_at && (
+                              <p className="text-xs text-gray-400 mt-1">
+                                마지막 활동: {new Date(device.last_active_at).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-13 sm:ml-0">
+                          <button
+                            onClick={() => handleDeleteKiosk(device.id)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                            title="삭제"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 키오스크 설정 안내 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="font-medium text-blue-900 mb-2 text-sm sm:text-base">키오스크 설정 방법</h3>
+                <ol className="list-decimal list-inside text-xs sm:text-sm text-blue-800 space-y-2">
+                  <li>위에서 새 키오스크를 등록하세요</li>
+                  <li>등록된 기기코드를 복사하세요</li>
+                  <li>키오스크 앱에서 기기코드를 입력하세요</li>
+                  <li>연결이 완료되면 직원들이 출퇴근 체크를 할 수 있습니다</li>
+                </ol>
+              </div>
             </div>
           )}
 
@@ -1227,6 +1589,75 @@ export function SettingsPage() {
                 className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 text-sm w-full sm:w-auto"
               >
                 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 키오스크 추가 모달 */}
+      {showAddKioskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md overflow-hidden">
+            <div className="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">새 키오스크 등록</h3>
+              <button onClick={() => setShowAddKioskModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-4 sm:p-6 space-y-4">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                  기기명 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newKioskName}
+                  onChange={(e) => setNewKioskName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                  placeholder="예: 1층 로비 키오스크"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+                  설치 위치
+                </label>
+                <input
+                  type="text"
+                  value={newKioskLocation}
+                  onChange={(e) => setNewKioskLocation(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                  placeholder="예: 본관 1층 정문 앞"
+                />
+              </div>
+              
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-600">
+                  등록 후 발급되는 <strong>기기코드</strong>를 키오스크 앱에 입력하면 연결됩니다.
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-3 sm:p-4 border-t border-gray-200 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
+              <button
+                onClick={() => setShowAddKioskModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm w-full sm:w-auto"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleAddKiosk}
+                disabled={isAddingKiosk || !newKioskName.trim()}
+                className="flex items-center justify-center gap-2 px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm w-full sm:w-auto"
+              >
+                {isAddingKiosk ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <Plus size={18} />
+                )}
+                등록
               </button>
             </div>
           </div>

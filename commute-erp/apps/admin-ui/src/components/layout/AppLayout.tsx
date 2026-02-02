@@ -7,7 +7,10 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useIdleTimer } from '../../hooks/useIdleTimer';
+import { IdleWarningModal } from '../common/IdleWarningModal';
+import toast from 'react-hot-toast';
 
 // 라우트별 페이지 제목 매핑
 const routeTitles: Record<string, { title: string; subtitle?: string }> = {
@@ -48,8 +51,46 @@ function getRouteTitle(pathname: string): { title: string; subtitle?: string } {
 
 export function AppLayout() {
   const { sidebarCollapsed } = useUIStore();
-  const { isAuthenticated, checkSession } = useAuthStore();
+  const { isAuthenticated, checkSession, logout } = useAuthStore();
   const location = useLocation();
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
+
+  // 자동 로그아웃 설정 (10분 비활성 시 로그아웃, 1분 전 경고)
+  const IDLE_TIMEOUT = 10 * 60 * 1000; // 10분
+  const WARNING_TIME = 60 * 1000; // 1분 전 경고
+
+  // 로그아웃 처리
+  const handleLogout = useCallback(() => {
+    setShowIdleWarning(false);
+    logout();
+    toast.success('자동 로그아웃되었습니다');
+  }, [logout]);
+
+  // 경고 표시
+  const handleWarning = useCallback(() => {
+    setShowIdleWarning(true);
+  }, []);
+
+  // 활동 감지 시
+  const handleActive = useCallback(() => {
+    setShowIdleWarning(false);
+  }, []);
+
+  // 비활성 타이머
+  const { remainingTime, reset } = useIdleTimer({
+    timeout: IDLE_TIMEOUT,
+    warningTime: WARNING_TIME,
+    onIdle: handleLogout,
+    onWarning: handleWarning,
+    onActive: handleActive,
+  });
+
+  // 계속 사용 버튼 클릭
+  const handleStayLoggedIn = useCallback(() => {
+    setShowIdleWarning(false);
+    reset();
+    toast.success('세션이 연장되었습니다');
+  }, [reset]);
 
   // 현재 라우트에 맞는 제목 가져오기
   const { title, subtitle } = useMemo(
@@ -89,6 +130,14 @@ export function AppLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* 자동 로그아웃 경고 모달 */}
+      <IdleWarningModal
+        isOpen={showIdleWarning}
+        remainingSeconds={Math.ceil(remainingTime / 1000)}
+        onStayLoggedIn={handleStayLoggedIn}
+        onLogout={handleLogout}
+      />
     </div>
   );
 }

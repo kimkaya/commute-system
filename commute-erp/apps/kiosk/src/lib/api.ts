@@ -1,10 +1,60 @@
 // =====================================================
-// Kiosk API 서비스
+// Kiosk API 서비스 (멀티사업장 지원)
 // =====================================================
 
 import { supabase } from './supabase';
 
+// Supabase URL
+export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || 'https://waazyjqdjdrnvcmymcga.supabase.co').trim();
+export const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhYXp5anFkamRybnZjbXltY2dhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NzU3MTYsImV4cCI6MjA4NTI1MTcxNn0.9h0j2EhMyPZtOo2SWiyJBx5G-SP36QAudlN_yS9OUrU').trim();
+
+// 기본 사업장 ID (레거시 호환용)
 const BUSINESS_ID = '00000000-0000-0000-0000-000000000001';
+
+// =====================================================
+// 키오스크 기기 인증 (기기코드로)
+// =====================================================
+
+export interface KioskAuthResult {
+  success: boolean;
+  device_id?: string;
+  device_code?: string;
+  device_name?: string;
+  business_id?: string;
+  business_name?: string;
+  error?: string;
+}
+
+export async function authenticateKiosk(deviceCode: string): Promise<KioskAuthResult> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/kiosk-auth`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ device_code: deviceCode }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { success: false, error: data.error || '기기 인증에 실패했습니다' };
+    }
+
+    return {
+      success: true,
+      device_id: data.device_id,
+      device_code: data.device_code,
+      device_name: data.device_name,
+      business_id: data.business_id,
+      business_name: data.business_name,
+    };
+  } catch (err) {
+    console.error('Kiosk auth error:', err);
+    return { success: false, error: '기기 인증 중 오류가 발생했습니다' };
+  }
+}
 
 // =====================================================
 // IP 관련 기능 (대리 출석 방지)
@@ -49,9 +99,11 @@ export interface IPValidationResult {
 export async function validateAndLogIP(
   employeeId: string | null,
   employeeName: string | null,
-  action: 'check_in' | 'check_out' | 'face_auth' | 'password_auth'
+  action: 'check_in' | 'check_out' | 'face_auth' | 'password_auth',
+  businessId?: string
 ): Promise<IPValidationResult> {
   const currentIP = await getCurrentIP();
+  const targetBusinessId = businessId || BUSINESS_ID;
   
   try {
     const userAgent = navigator.userAgent;
@@ -60,7 +112,7 @@ export async function validateAndLogIP(
     const { data: approvedDevices, error: deviceError } = await supabase
       .from('kiosk_devices')
       .select('*')
-      .eq('business_id', BUSINESS_ID)
+      .eq('business_id', targetBusinessId)
       .eq('status', 'approved');
 
     // 테이블이 없는 경우 통과
@@ -83,7 +135,7 @@ export async function validateAndLogIP(
     const { data: currentDevice } = await supabase
       .from('kiosk_devices')
       .select('*')
-      .eq('business_id', BUSINESS_ID)
+      .eq('business_id', targetBusinessId)
       .or(`fixed_ip.eq.${currentIP},requested_ip.eq.${currentIP}`)
       .maybeSingle();
 
@@ -95,7 +147,7 @@ export async function validateAndLogIP(
 
     // 접속 로그 저장 (비동기, 에러 무시)
     supabase.from('ip_access_logs').insert({
-      business_id: BUSINESS_ID,
+      business_id: targetBusinessId,
       employee_id: employeeId,
       employee_name: employeeName,
       access_ip: currentIP,
@@ -109,7 +161,7 @@ export async function validateAndLogIP(
     // 비정상 접속 시 관리자 알림 생성 (비동기)
     if (isSuspicious && employeeId) {
       supabase.from('notifications').insert({
-        business_id: BUSINESS_ID,
+        business_id: targetBusinessId,
         recipient_id: null,
         type: 'security',
         title: '⚠️ 비정상 출퇴근 접속 감지',
@@ -136,18 +188,19 @@ export async function validateAndLogIP(
 }
 
 // 고정 IP 등록 요청
-export async function requestFixedIP(deviceName: string, location: string): Promise<{
+export async function requestFixedIP(deviceName: string, location: string, businessId?: string): Promise<{
   success: boolean;
   message: string;
 }> {
   try {
     const currentIP = await getCurrentIP();
+    const targetBusinessId = businessId || BUSINESS_ID;
 
     // 이미 요청한 기기인지 확인
     const { data: existing } = await supabase
       .from('kiosk_devices')
       .select('*')
-      .eq('business_id', BUSINESS_ID)
+      .eq('business_id', targetBusinessId)
       .eq('requested_ip', currentIP)
       .maybeSingle();
 
@@ -162,7 +215,7 @@ export async function requestFixedIP(deviceName: string, location: string): Prom
 
     // 새 기기 등록 요청
     const { error } = await supabase.from('kiosk_devices').insert({
-      business_id: BUSINESS_ID,
+      business_id: targetBusinessId,
       device_name: deviceName,
       location,
       requested_ip: currentIP,
@@ -174,7 +227,7 @@ export async function requestFixedIP(deviceName: string, location: string): Prom
 
     // 관리자 알림
     await supabase.from('notifications').insert({
-      business_id: BUSINESS_ID,
+      business_id: targetBusinessId,
       recipient_id: null,
       type: 'system',
       title: '📱 새 키오스크 기기 등록 요청',
@@ -193,18 +246,19 @@ export async function requestFixedIP(deviceName: string, location: string): Prom
 }
 
 // 현재 기기 상태 확인
-export async function getDeviceStatus(): Promise<{
+export async function getDeviceStatus(businessId?: string): Promise<{
   status: 'approved' | 'pending' | 'rejected' | 'disabled' | 'unregistered';
   deviceName?: string;
   currentIP: string;
 }> {
   const currentIP = await getCurrentIP();
+  const targetBusinessId = businessId || BUSINESS_ID;
   
   try {
     const { data, error } = await supabase
       .from('kiosk_devices')
       .select('*')
-      .eq('business_id', BUSINESS_ID)
+      .eq('business_id', targetBusinessId)
       .or(`fixed_ip.eq.${currentIP},requested_ip.eq.${currentIP}`)
       .maybeSingle();
 
@@ -254,11 +308,11 @@ export interface FaceTemplate {
 // 직원 조회
 // =====================================================
 
-export async function getEmployeeByNumber(employeeNumber: string): Promise<Employee | null> {
+export async function getEmployeeByNumber(employeeNumber: string, businessId?: string): Promise<Employee | null> {
   const { data, error } = await supabase
     .from('employees')
     .select('id, employee_number, name, department, position')
-    .eq('business_id', BUSINESS_ID)
+    .eq('business_id', businessId || BUSINESS_ID)
     .eq('employee_number', employeeNumber)
     .eq('is_active', true)
     .single();
@@ -297,7 +351,7 @@ export async function verifyPassword(employeeId: string, password: string): Prom
 // 얼굴 템플릿 조회 (얼굴 인식용)
 // =====================================================
 
-export async function getAllFaceTemplates(): Promise<{ employee: Employee; embedding: number[] }[]> {
+export async function getAllFaceTemplates(businessId?: string): Promise<{ employee: Employee; embedding: number[] }[]> {
   const { data, error } = await supabase
     .from('employee_face_templates')
     .select(`
@@ -305,7 +359,7 @@ export async function getAllFaceTemplates(): Promise<{ employee: Employee; embed
       embedding,
       employee:employees!inner(id, employee_number, name, department, position)
     `)
-    .eq('business_id', BUSINESS_ID);
+    .eq('business_id', businessId || BUSINESS_ID);
 
   if (error || !data) return [];
 
@@ -316,11 +370,11 @@ export async function getAllFaceTemplates(): Promise<{ employee: Employee; embed
   }));
 }
 
-export async function saveFaceTemplate(employeeId: string, embedding: number[]): Promise<boolean> {
+export async function saveFaceTemplate(employeeId: string, embedding: number[], businessId?: string): Promise<boolean> {
   const { error } = await supabase
     .from('employee_face_templates')
     .upsert({
-      business_id: BUSINESS_ID,
+      business_id: businessId || BUSINESS_ID,
       employee_id: employeeId,
       embedding,
     }, {
@@ -334,7 +388,7 @@ export async function saveFaceTemplate(employeeId: string, embedding: number[]):
 // 출퇴근 체크 (최적화 버전 - 단일 쿼리)
 // =====================================================
 
-export async function checkIn(employeeId: string, method: 'face' | 'password'): Promise<{
+export async function checkIn(employeeId: string, method: 'face' | 'password', businessId?: string): Promise<{
   success: boolean;
   message: string;
   record?: AttendanceRecord;
@@ -348,7 +402,7 @@ export async function checkIn(employeeId: string, method: 'face' | 'password'): 
   const { data, error } = await supabase
     .from('attendance_records')
     .upsert({
-      business_id: BUSINESS_ID,
+      business_id: businessId || BUSINESS_ID,
       employee_id: employeeId,
       date: today,
       check_in: time,
@@ -384,7 +438,7 @@ export async function checkIn(employeeId: string, method: 'face' | 'password'): 
   };
 }
 
-export async function checkOut(employeeId: string, method: 'face' | 'password'): Promise<{
+export async function checkOut(employeeId: string, method: 'face' | 'password', businessId?: string): Promise<{
   success: boolean;
   message: string;
   record?: AttendanceRecord;
@@ -392,6 +446,7 @@ export async function checkOut(employeeId: string, method: 'face' | 'password'):
   const today = new Date().toISOString().split('T')[0];
   const now = new Date();
   const time = now.toTimeString().split(' ')[0].substring(0, 5);
+  const targetBusinessId = businessId || BUSINESS_ID;
 
   // 단일 update 쿼리로 퇴근 처리 (check_out이 null인 경우만)
   const { data, error, count } = await supabase
@@ -401,6 +456,7 @@ export async function checkOut(employeeId: string, method: 'face' | 'password'):
       check_out_at: now.toISOString(),
       check_out_method: method,
     })
+    .eq('business_id', targetBusinessId)
     .eq('employee_id', employeeId)
     .eq('date', today)
     .eq('status', 'active')
@@ -415,6 +471,7 @@ export async function checkOut(employeeId: string, method: 'face' | 'password'):
       const { data: existing } = await supabase
         .from('attendance_records')
         .select('check_in, check_out')
+        .eq('business_id', targetBusinessId)
         .eq('employee_id', employeeId)
         .eq('date', today)
         .eq('status', 'active')
@@ -495,8 +552,8 @@ export function compareFaceEmbeddings(embedding1: number[], embedding2: number[]
   return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
 }
 
-export async function findMatchingEmployee(capturedEmbedding: number[], threshold: number = 0.6): Promise<Employee | null> {
-  const templates = await getAllFaceTemplates();
+export async function findMatchingEmployee(capturedEmbedding: number[], threshold: number = 0.6, businessId?: string): Promise<Employee | null> {
+  const templates = await getAllFaceTemplates(businessId);
 
   let bestMatch: { employee: Employee; score: number } | null = null;
 
