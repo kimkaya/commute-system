@@ -44,6 +44,15 @@ export interface Employee {
   health_insurance_exempt?: boolean;   // 건강보험 제외
   employment_insurance_exempt?: boolean; // 고용보험 제외
   industrial_accident_exempt?: boolean; // 산재보험 제외
+  // 개인별 세율 설정 (NEW)
+  tax_type?: 'regular' | 'freelancer'; // 세금 유형: 일반(4대보험) / 프리랜서(3.3%)
+  freelancer_tax_rate?: number | null; // 프리랜서 원천징수 세율 (기본 3.3%)
+  national_pension_rate?: number | null;    // 국민연금 개인 요율 (NULL=기본 4.5%)
+  health_insurance_rate?: number | null;    // 건강보험 개인 요율 (NULL=기본 3.545%)
+  long_term_care_rate?: number | null;      // 장기요양보험 개인 요율 (NULL=건강보험의 12.81%)
+  employment_insurance_rate?: number | null; // 고용보험 개인 요율 (NULL=기본 0.9%)
+  industrial_accident_rate?: number | null;  // 산재보험 개인 요율 (NULL=기본 0%)
+  local_income_tax_rate?: number | null;     // 지방소득세 요율 (NULL=소득세의 10%)
 }
 
 export interface AttendanceRecord {
@@ -1349,12 +1358,13 @@ function getDependentsTax(row: IncomeTaxTableRow, dependentsCount: number): numb
   }
 }
 
-// 개인별 세금 계산 (간이세액표 + 4대보험)
+// 개인별 세금 계산 (간이세액표 + 4대보험 또는 프리랜서 3.3%)
 export async function calculateEmployeeTaxes(
   grossPay: number,
   employee: Employee,
   settings?: TaxSettings
 ): Promise<{
+  taxType: 'regular' | 'freelancer';
   taxableIncome: number;
   taxFreeAmount: number;
   incomeTax: number;
@@ -1363,10 +1373,12 @@ export async function calculateEmployeeTaxes(
   healthInsurance: number;
   longTermCare: number;
   employmentInsurance: number;
+  industrialAccident: number;
   totalDeductions: number;
   netPay: number;
 }> {
   const s = settings || getTaxSettings();
+  const taxType = employee.tax_type || 'regular';
   
   // 비과세 금액 계산
   const taxFreeAmount = (employee.tax_free_meals || 0) + 
@@ -1376,7 +1388,31 @@ export async function calculateEmployeeTaxes(
   // 과세대상 급여 = 총급여 - 비과세
   const taxableIncome = Math.max(0, grossPay - taxFreeAmount);
   
-  // 소득세 계산
+  // 프리랜서(3.3%) 세금 계산
+  if (taxType === 'freelancer') {
+    const freelancerRate = employee.freelancer_tax_rate ?? 0.033;
+    const freelancerTax = Math.round(taxableIncome * freelancerRate);
+    // 프리랜서는 소득세 3% + 지방소득세 0.3% (소득세의 10%)
+    const incomeTax = Math.round(freelancerTax / 1.1); // 소득세 부분
+    const localTax = freelancerTax - incomeTax; // 지방소득세 부분
+    
+    return {
+      taxType: 'freelancer',
+      taxableIncome,
+      taxFreeAmount,
+      incomeTax,
+      localTax,
+      nationalPension: 0,
+      healthInsurance: 0,
+      longTermCare: 0,
+      employmentInsurance: 0,
+      industrialAccident: 0,
+      totalDeductions: freelancerTax,
+      netPay: grossPay - freelancerTax,
+    };
+  }
+  
+  // 일반(4대보험) 세금 계산
   let incomeTax: number;
   
   if (employee.income_tax_override !== null && employee.income_tax_override !== undefined) {
@@ -1388,33 +1424,47 @@ export async function calculateEmployeeTaxes(
     incomeTax = await lookupIncomeTax(taxableIncome, dependentsCount);
   }
   
-  // 지방소득세 (소득세의 10%)
-  const localTax = Math.round(incomeTax * 0.1);
+  // 지방소득세 (개인별 세율 또는 소득세의 10%)
+  const localTaxRate = employee.local_income_tax_rate ?? 0.1;
+  const localTax = Math.round(incomeTax * localTaxRate);
   
-  // 4대보험 계산 (면제 여부 확인)
+  // 4대보험 계산 (면제 여부 및 개인별 세율 확인)
   let nationalPension = 0;
   if (!employee.national_pension_exempt) {
-    // 국민연금: 기준소득월액 상하한 적용
+    // 국민연금: 기준소득월액 상하한 적용 (2024년 기준: 37만~590만)
     const pensionBase = Math.min(Math.max(taxableIncome, 370000), 5900000);
-    nationalPension = Math.round(pensionBase * s.nationalPensionRate);
+    const pensionRate = employee.national_pension_rate ?? s.nationalPensionRate;
+    nationalPension = Math.round(pensionBase * pensionRate);
   }
   
   let healthInsurance = 0;
   let longTermCare = 0;
   if (!employee.health_insurance_exempt) {
-    healthInsurance = Math.round(taxableIncome * s.healthInsuranceRate);
-    longTermCare = Math.round(healthInsurance * s.longTermCareRate);
+    const healthRate = employee.health_insurance_rate ?? s.healthInsuranceRate;
+    healthInsurance = Math.round(taxableIncome * healthRate);
+    
+    const longTermCareRate = employee.long_term_care_rate ?? s.longTermCareRate;
+    longTermCare = Math.round(healthInsurance * longTermCareRate);
   }
   
   let employmentInsurance = 0;
   if (!employee.employment_insurance_exempt) {
-    employmentInsurance = Math.round(taxableIncome * s.employmentInsuranceRate);
+    const employmentRate = employee.employment_insurance_rate ?? s.employmentInsuranceRate;
+    employmentInsurance = Math.round(taxableIncome * employmentRate);
   }
   
-  const totalDeductions = incomeTax + localTax + nationalPension + healthInsurance + longTermCare + employmentInsurance;
+  let industrialAccident = 0;
+  if (!employee.industrial_accident_exempt) {
+    // 산재보험: 보통 사업주 부담이지만 개별 설정 시 적용
+    const industrialRate = employee.industrial_accident_rate ?? 0;
+    industrialAccident = Math.round(taxableIncome * industrialRate);
+  }
+  
+  const totalDeductions = incomeTax + localTax + nationalPension + healthInsurance + longTermCare + employmentInsurance + industrialAccident;
   const netPay = grossPay - totalDeductions;
   
   return {
+    taxType: 'regular',
     taxableIncome,
     taxFreeAmount,
     incomeTax,
@@ -1423,6 +1473,7 @@ export async function calculateEmployeeTaxes(
     healthInsurance,
     longTermCare,
     employmentInsurance,
+    industrialAccident,
     totalDeductions,
     netPay,
   };
