@@ -43,6 +43,7 @@ export interface Employee {
   national_pension_exempt?: boolean;   // 국민연금 제외
   health_insurance_exempt?: boolean;   // 건강보험 제외
   employment_insurance_exempt?: boolean; // 고용보험 제외
+  industrial_accident_exempt?: boolean; // 산재보험 제외
 }
 
 export interface AttendanceRecord {

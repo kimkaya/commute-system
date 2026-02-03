@@ -58,6 +58,7 @@ interface EmployeeFormData {
   national_pension_exempt: boolean;
   health_insurance_exempt: boolean;
   employment_insurance_exempt: boolean;
+  industrial_accident_exempt: boolean; // 산재보험 제외
 }
 
 const initialFormData: EmployeeFormData = {
@@ -84,6 +85,7 @@ const initialFormData: EmployeeFormData = {
   national_pension_exempt: false,
   health_insurance_exempt: false,
   employment_insurance_exempt: false,
+  industrial_accident_exempt: false,
 };
 
 export function EmployeeFormPage() {
@@ -131,6 +133,7 @@ export function EmployeeFormPage() {
         national_pension_exempt: existingEmployee.national_pension_exempt || false,
         health_insurance_exempt: existingEmployee.health_insurance_exempt || false,
         employment_insurance_exempt: existingEmployee.employment_insurance_exempt || false,
+        industrial_accident_exempt: existingEmployee.industrial_accident_exempt || false,
       });
     }
   }, [existingEmployee]);
@@ -161,6 +164,7 @@ export function EmployeeFormPage() {
         national_pension_exempt: data.national_pension_exempt,
         health_insurance_exempt: data.health_insurance_exempt,
         employment_insurance_exempt: data.employment_insurance_exempt,
+        industrial_accident_exempt: data.industrial_accident_exempt,
       });
       
       // 비밀번호 설정
@@ -206,6 +210,7 @@ export function EmployeeFormPage() {
         national_pension_exempt: data.national_pension_exempt,
         health_insurance_exempt: data.health_insurance_exempt,
         employment_insurance_exempt: data.employment_insurance_exempt,
+        industrial_accident_exempt: data.industrial_accident_exempt,
       });
       
       // 비밀번호 변경
@@ -769,6 +774,16 @@ export function EmployeeFormPage() {
                         className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                       />
                       <span className="text-sm text-gray-700">고용보험 제외 (65세 이상 등)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="industrial_accident_exempt"
+                        checked={formData.industrial_accident_exempt}
+                        onChange={(e) => setFormData(prev => ({ ...prev, industrial_accident_exempt: e.target.checked }))}
+                        className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">산재보험 제외</span>
                     </label>
                   </div>
                 </div>
