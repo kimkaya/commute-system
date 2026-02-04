@@ -269,10 +269,10 @@ export async function getEmployee(id: string): Promise<Employee | null> {
     .from('employees')
     .select('*')
     .eq('id', id)
-    .single();
+    .limit(1);
 
   if (error) throw error;
-  return data;
+  return data && data.length > 0 ? data[0] : null;
 }
 
 export async function createEmployee(employee: Partial<Employee>): Promise<Employee> {
@@ -860,11 +860,12 @@ export async function getEmployeeCredentials(employeeId: string) {
 }
 
 export async function createEmployeeCredentials(employeeId: string, password: string) {
+  // employee_credentials 테이블에 저장 (레거시 호환)
   const { data, error } = await supabase
     .from('employee_credentials')
     .upsert({
       employee_id: employeeId,
-      password_hash: password, // 실제로는 해시해야 함
+      password_hash: password,
     }, {
       onConflict: 'employee_id',
     })
@@ -872,6 +873,13 @@ export async function createEmployeeCredentials(employeeId: string, password: st
     .single();
 
   if (error) throw error;
+  
+  // employees 테이블의 password_hash에도 저장 (로그인 함수에서 사용)
+  await supabase
+    .from('employees')
+    .update({ password_hash: password })
+    .eq('id', employeeId);
+
   return data;
 }
 
@@ -2537,4 +2545,567 @@ export function saveNotificationSettings(settings: NotificationSettings): void {
     console.error('Failed to save notification settings:', e);
   }
 }
+
+// =====================================================
+// 사내 메신저 API
+// =====================================================
+
+export interface Conversation {
+  id: string;
+  business_id: string;
+  type: 'direct' | 'group' | 'channel';
+  name: string | null;
+  description: string | null;
+  avatar_url: string | null;
+  created_by: string | null;
+  is_active: boolean;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  settings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  participants?: ConversationParticipant[];
+  unread_count?: number;
+}
+
+export interface ConversationParticipant {
+  id: string;
+  conversation_id: string;
+  employee_id: string;
+  role: 'admin' | 'member';
+  nickname: string | null;
+  is_muted: boolean;
+  is_pinned: boolean;
+  last_read_at: string;
+  unread_count: number;
+  joined_at: string;
+  is_active: boolean;
+  employee?: Employee;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string | null;
+  message_type: 'text' | 'image' | 'file' | 'system' | 'reply' | 'forward';
+  reply_to_id: string | null;
+  forwarded_from_id: string | null;
+  attachments: MessageAttachment[];
+  is_edited: boolean;
+  edited_at: string | null;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  mentions: string[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  sender?: Employee;
+  reply_to?: Message;
+  reactions?: MessageReaction[];
+}
+
+export interface MessageAttachment {
+  name: string;
+  url: string;
+  size: number;
+  type: string;
+  thumbnail_url?: string;
+}
+
+export interface MessageReaction {
+  id: string;
+  message_id: string;
+  employee_id: string;
+  emoji: string;
+  created_at: string;
+  employee?: Employee;
+}
+
+// 채팅방 목록 조회
+export async function getConversations(employeeId?: string): Promise<Conversation[]> {
+  try {
+    // 참여 중인 채팅방 조회
+    let participantQuery = supabase
+      .from('conversation_participants')
+      .select('conversation_id, unread_count, is_pinned')
+      .eq('is_active', true);
+    
+    if (employeeId) {
+      participantQuery = participantQuery.eq('employee_id', employeeId);
+    }
+    
+    const { data: participantData, error: participantError } = await participantQuery;
+    if (participantError) throw participantError;
+    
+    if (!participantData || participantData.length === 0) {
+      return [];
+    }
+    
+    const conversationIds = participantData.map(p => p.conversation_id);
+    const unreadMap = new Map(participantData.map(p => [p.conversation_id, p.unread_count]));
+    const pinnedMap = new Map(participantData.map(p => [p.conversation_id, p.is_pinned]));
+    
+    // 채팅방 정보 조회
+    const { data: conversations, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .in('id', conversationIds)
+      .eq('is_active', true)
+      .order('last_message_at', { ascending: false, nullsFirst: false });
+    
+    if (error) throw error;
+    
+    // 각 채팅방의 참여자 정보 조회
+    const { data: allParticipants } = await supabase
+      .from('conversation_participants')
+      .select('*, employee:employees(*)')
+      .in('conversation_id', conversationIds)
+      .eq('is_active', true);
+    
+    const participantsMap = new Map<string, ConversationParticipant[]>();
+    (allParticipants || []).forEach(p => {
+      const list = participantsMap.get(p.conversation_id) || [];
+      list.push(p);
+      participantsMap.set(p.conversation_id, list);
+    });
+    
+    return (conversations || []).map(conv => ({
+      ...conv,
+      participants: participantsMap.get(conv.id) || [],
+      unread_count: unreadMap.get(conv.id) || 0,
+      is_pinned: pinnedMap.get(conv.id) || false,
+    })).sort((a, b) => {
+      // 고정된 채팅방 먼저
+      if (a.is_pinned && !b.is_pinned) return -1;
+      if (!a.is_pinned && b.is_pinned) return 1;
+      // 최근 메시지 순
+      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return bTime - aTime;
+    });
+  } catch (error) {
+    console.error('Failed to get conversations:', error);
+    return [];
+  }
+}
+
+// 채팅방 상세 조회
+export async function getConversation(id: string): Promise<Conversation | null> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('id', id)
+    .single();
+  
+  if (error) throw error;
+  
+  // 참여자 조회
+  const { data: participants } = await supabase
+    .from('conversation_participants')
+    .select('*, employee:employees(*)')
+    .eq('conversation_id', id)
+    .eq('is_active', true);
+  
+  return {
+    ...data,
+    participants: participants || [],
+  };
+}
+
+// 1:1 채팅방 생성 또는 조회
+export async function getOrCreateDirectConversation(
+  employeeId1: string,
+  employeeId2: string
+): Promise<Conversation> {
+  // 기존 1:1 채팅방 찾기
+  const { data: existing } = await supabase
+    .from('conversation_participants')
+    .select('conversation_id')
+    .eq('employee_id', employeeId1);
+  
+  if (existing && existing.length > 0) {
+    const convIds = existing.map(e => e.conversation_id);
+    
+    const { data: directConvs } = await supabase
+      .from('conversations')
+      .select('id')
+      .in('id', convIds)
+      .eq('type', 'direct');
+    
+    if (directConvs && directConvs.length > 0) {
+      const directConvIds = directConvs.map(c => c.id);
+      
+      const { data: matchingParticipants } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('employee_id', employeeId2)
+        .in('conversation_id', directConvIds);
+      
+      if (matchingParticipants && matchingParticipants.length > 0) {
+        const conv = await getConversation(matchingParticipants[0].conversation_id);
+        if (conv) return conv;
+      }
+    }
+  }
+  
+  // 새 채팅방 생성
+  const { data: newConv, error } = await supabase
+    .from('conversations')
+    .insert({
+      business_id: BUSINESS_ID,
+      type: 'direct',
+      created_by: employeeId1,
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  // 참여자 추가
+  await supabase
+    .from('conversation_participants')
+    .insert([
+      { conversation_id: newConv.id, employee_id: employeeId1, role: 'member' },
+      { conversation_id: newConv.id, employee_id: employeeId2, role: 'member' },
+    ]);
+  
+  return getConversation(newConv.id) as Promise<Conversation>;
+}
+
+// 그룹 채팅방 생성
+export async function createGroupConversation(
+  name: string,
+  participantIds: string[],
+  createdBy: string
+): Promise<Conversation> {
+  const { data: newConv, error } = await supabase
+    .from('conversations')
+    .insert({
+      business_id: BUSINESS_ID,
+      type: 'group',
+      name,
+      created_by: createdBy,
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  // 참여자 추가
+  const participants = participantIds.map(empId => ({
+    conversation_id: newConv.id,
+    employee_id: empId,
+    role: empId === createdBy ? 'admin' : 'member',
+  }));
+  
+  await supabase.from('conversation_participants').insert(participants);
+  
+  // 시스템 메시지 추가
+  await sendMessage(newConv.id, createdBy, `채팅방이 생성되었습니다.`, 'system');
+  
+  return getConversation(newConv.id) as Promise<Conversation>;
+}
+
+// 채팅방 나가기
+export async function leaveConversation(conversationId: string, employeeId: string): Promise<void> {
+  await supabase
+    .from('conversation_participants')
+    .update({ is_active: false, left_at: new Date().toISOString() })
+    .eq('conversation_id', conversationId)
+    .eq('employee_id', employeeId);
+}
+
+// 채팅방 참여자 추가
+export async function addParticipants(conversationId: string, employeeIds: string[]): Promise<void> {
+  const participants = employeeIds.map(empId => ({
+    conversation_id: conversationId,
+    employee_id: empId,
+    role: 'member',
+  }));
+  
+  await supabase.from('conversation_participants').upsert(participants, {
+    onConflict: 'conversation_id,employee_id',
+  });
+}
+
+// 메시지 목록 조회
+export async function getMessages(
+  conversationId: string,
+  options?: { limit?: number; before?: string }
+): Promise<Message[]> {
+  let query = supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: false });
+  
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  } else {
+    query = query.limit(50);
+  }
+  
+  if (options?.before) {
+    query = query.lt('created_at', options.before);
+  }
+  
+  const { data, error } = await query;
+  if (error) throw error;
+  
+  // 발신자 정보 조회
+  const senderIds = [...new Set((data || []).map(m => m.sender_id))];
+  let senders: Employee[] = [];
+  if (senderIds.length > 0) {
+    const { data: senderData } = await supabase
+      .from('employees')
+      .select('*')
+      .in('id', senderIds);
+    senders = senderData || [];
+  }
+  
+  const senderMap = new Map(senders.map(s => [s.id, s]));
+  
+  // 반응 조회
+  const messageIds = (data || []).map(m => m.id);
+  let reactions: MessageReaction[] = [];
+  if (messageIds.length > 0) {
+    const { data: reactionData } = await supabase
+      .from('message_reactions')
+      .select('*')
+      .in('message_id', messageIds);
+    reactions = reactionData || [];
+  }
+  
+  const reactionMap = new Map<string, MessageReaction[]>();
+  reactions.forEach(r => {
+    const list = reactionMap.get(r.message_id) || [];
+    list.push(r);
+    reactionMap.set(r.message_id, list);
+  });
+  
+  return (data || []).map(msg => ({
+    ...msg,
+    sender: senderMap.get(msg.sender_id),
+    reactions: reactionMap.get(msg.id) || [],
+  })).reverse(); // 시간순 정렬
+}
+
+// 메시지 전송
+export async function sendMessage(
+  conversationId: string,
+  senderId: string,
+  content: string,
+  messageType: Message['message_type'] = 'text',
+  options?: {
+    attachments?: MessageAttachment[];
+    replyToId?: string;
+    mentions?: string[];
+  }
+): Promise<Message> {
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      sender_id: senderId,
+      content,
+      message_type: messageType,
+      attachments: options?.attachments || [],
+      reply_to_id: options?.replyToId || null,
+      mentions: options?.mentions || [],
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  // 발신자 정보 조회
+  const { data: sender } = await supabase
+    .from('employees')
+    .select('*')
+    .eq('id', senderId)
+    .single();
+  
+  return { ...data, sender };
+}
+
+// 메시지 수정
+export async function editMessage(messageId: string, content: string): Promise<Message> {
+  const { data, error } = await supabase
+    .from('messages')
+    .update({
+      content,
+      is_edited: true,
+      edited_at: new Date().toISOString(),
+    })
+    .eq('id', messageId)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+// 메시지 삭제
+export async function deleteMessage(messageId: string): Promise<void> {
+  await supabase
+    .from('messages')
+    .update({
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('id', messageId);
+}
+
+// 메시지 읽음 처리
+export async function markMessagesAsRead(conversationId: string, employeeId: string): Promise<void> {
+  // 해당 채팅방의 마지막 메시지 조회
+  const { data: lastMessage } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  
+  if (lastMessage) {
+    // 읽음 처리
+    await supabase
+      .from('message_read_receipts')
+      .upsert({
+        message_id: lastMessage.id,
+        employee_id: employeeId,
+        read_at: new Date().toISOString(),
+      }, {
+        onConflict: 'message_id,employee_id',
+      });
+  }
+  
+  // 참여자의 unread_count 리셋
+  await supabase
+    .from('conversation_participants')
+    .update({
+      unread_count: 0,
+      last_read_at: new Date().toISOString(),
+    })
+    .eq('conversation_id', conversationId)
+    .eq('employee_id', employeeId);
+}
+
+// 메시지 반응 추가/제거
+export async function toggleMessageReaction(
+  messageId: string,
+  employeeId: string,
+  emoji: string
+): Promise<void> {
+  // 기존 반응 확인
+  const { data: existing } = await supabase
+    .from('message_reactions')
+    .select('id')
+    .eq('message_id', messageId)
+    .eq('employee_id', employeeId)
+    .eq('emoji', emoji)
+    .single();
+  
+  if (existing) {
+    // 제거
+    await supabase
+      .from('message_reactions')
+      .delete()
+      .eq('id', existing.id);
+  } else {
+    // 추가
+    await supabase
+      .from('message_reactions')
+      .insert({
+        message_id: messageId,
+        employee_id: employeeId,
+        emoji,
+      });
+  }
+}
+
+// 전체 안읽은 메시지 수 조회
+export async function getTotalUnreadCount(employeeId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('conversation_participants')
+    .select('unread_count')
+    .eq('employee_id', employeeId)
+    .eq('is_active', true);
+  
+  if (error) {
+    console.error('Failed to get unread count:', error);
+    return 0;
+  }
+  
+  return (data || []).reduce((sum, p) => sum + (p.unread_count || 0), 0);
+}
+
+// 채팅방 검색
+export async function searchMessages(
+  query: string,
+  options?: { conversationId?: string; limit?: number }
+): Promise<Message[]> {
+  let searchQuery = supabase
+    .from('messages')
+    .select('*')
+    .ilike('content', `%${query}%`)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: false });
+  
+  if (options?.conversationId) {
+    searchQuery = searchQuery.eq('conversation_id', options.conversationId);
+  }
+  
+  if (options?.limit) {
+    searchQuery = searchQuery.limit(options.limit);
+  } else {
+    searchQuery = searchQuery.limit(20);
+  }
+  
+  const { data, error } = await searchQuery;
+  if (error) throw error;
+  
+  return data || [];
+}
+
+// 채팅방 고정/해제
+export async function togglePinConversation(
+  conversationId: string,
+  employeeId: string
+): Promise<void> {
+  const { data: current } = await supabase
+    .from('conversation_participants')
+    .select('is_pinned')
+    .eq('conversation_id', conversationId)
+    .eq('employee_id', employeeId)
+    .single();
+  
+  await supabase
+    .from('conversation_participants')
+    .update({ is_pinned: !current?.is_pinned })
+    .eq('conversation_id', conversationId)
+    .eq('employee_id', employeeId);
+}
+
+// 채팅방 음소거/해제
+export async function toggleMuteConversation(
+  conversationId: string,
+  employeeId: string
+): Promise<void> {
+  const { data: current } = await supabase
+    .from('conversation_participants')
+    .select('is_muted')
+    .eq('conversation_id', conversationId)
+    .eq('employee_id', employeeId)
+    .single();
+  
+  await supabase
+    .from('conversation_participants')
+    .update({ is_muted: !current?.is_muted })
+    .eq('conversation_id', conversationId)
+    .eq('employee_id', employeeId);
+}
+
 

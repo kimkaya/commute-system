@@ -16,6 +16,7 @@ import { MyAttendancePage } from './pages/attendance/MyAttendancePage';
 import { MyPayrollPage } from './pages/payroll/MyPayrollPage';
 import { MyLeavePage } from './pages/leave/MyLeavePage';
 import { ProfilePage } from './pages/profile/ProfilePage';
+import { MessengerPage } from './pages/messenger/MessengerPage';
 import { PrivacyPolicyPage } from './pages/legal/PrivacyPolicyPage';
 import { TermsOfServicePage } from './pages/legal/TermsOfServicePage';
 import { SupportPage } from './pages/legal/SupportPage';
@@ -49,6 +50,9 @@ function App() {
 
             {/* 휴가 */}
             <Route path="/leave" element={<MyLeavePage />} />
+
+            {/* 메신저 */}
+            <Route path="/messenger" element={<MessengerPage />} />
 
             {/* 내정보 */}
             <Route path="/profile" element={<ProfilePage />} />

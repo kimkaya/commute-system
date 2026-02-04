@@ -121,8 +121,8 @@ export function Header({ title }: HeaderProps) {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 bg-white border-b border-gray-100 z-40">
-      <div className="flex items-center justify-between h-14 px-4 max-w-lg mx-auto">
+    <header className="fixed top-0 left-0 right-0 bg-white border-b border-gray-100 z-50">
+      <div className="flex items-center justify-between h-14 px-4 max-w-4xl lg:max-w-5xl mx-auto">
         {/* 로고 / 타이틀 */}
         <div className="flex items-center gap-2">
           {title ? (

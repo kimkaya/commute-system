@@ -1,5 +1,5 @@
 // =====================================================
-// 앱 레이아웃 컴포넌트
+// 앱 레이아웃 컴포넌트 (모바일 + PC 반응형)
 // =====================================================
 
 import { Navigate, Outlet } from 'react-router-dom';
@@ -20,13 +20,13 @@ export function AppLayout() {
       {/* 헤더 */}
       <Header />
 
+      {/* 하단 네비게이션 (PC에서는 상단에 표시) */}
+      <BottomNav />
+
       {/* 메인 콘텐츠 */}
-      <main className="pt-14 pb-20 px-4 max-w-lg mx-auto">
+      <main className="pt-14 pb-20 px-4 max-w-lg mx-auto md:pt-28 md:pb-8 md:max-w-4xl lg:max-w-5xl">
         <Outlet />
       </main>
-
-      {/* 하단 네비게이션 */}
-      <BottomNav />
     </div>
   );
 }
