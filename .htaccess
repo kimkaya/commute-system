@@ -1,0 +1,42 @@
+# =====================================================
+# UTF-8 Encoding Settings
+# =====================================================
+
+# Default character set
+AddDefaultCharset UTF-8
+
+# Set Content-Type headers for specific file types
+<IfModule mod_headers.c>
+    # HTML files
+    <FilesMatch "\.(html|htm)$">
+        Header set Content-Type "text/html; charset=UTF-8"
+    </FilesMatch>
+    
+    # CSS files
+    <FilesMatch "\.css$">
+        Header set Content-Type "text/css; charset=UTF-8"
+    </FilesMatch>
+    
+    # JavaScript files
+    <FilesMatch "\.js$">
+        Header set Content-Type "application/javascript; charset=UTF-8"
+    </FilesMatch>
+    
+    # JSON files
+    <FilesMatch "\.json$">
+        Header set Content-Type "application/json; charset=UTF-8"
+    </FilesMatch>
+</IfModule>
+
+# PHP files character set
+<IfModule mod_php.c>
+    php_value default_charset "UTF-8"
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes
+
+# Enable mod_rewrite
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+</IfModule>

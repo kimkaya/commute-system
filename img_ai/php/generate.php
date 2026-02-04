@@ -2,7 +2,7 @@
 set_time_limit(600); // 10분 실행 제한
 ini_set('max_execution_time', 600);
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
 $response = ['success' => false];

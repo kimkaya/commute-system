@@ -32,10 +32,8 @@ import {
   createGroupConversation,
   getOrCreateDirectConversation,
   getEmployeeList,
-  Conversation,
-  Message,
-  Employee,
 } from '../../lib/api';
+import type { Conversation, Message, Employee } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { format, isToday, isYesterday } from 'date-fns';
