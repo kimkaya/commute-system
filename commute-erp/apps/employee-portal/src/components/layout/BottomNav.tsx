@@ -4,19 +4,43 @@
 
 import { NavLink } from 'react-router-dom';
 import { Clock, Wallet, CalendarDays, MessageSquare, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { getTotalUnreadCount } from '../../lib/api';
+import { useAuthStore } from '../../stores/authStore';
 
 interface NavItem {
   path: string;
   label: string;
   icon: React.ReactNode;
+  showBadge?: boolean;
 }
 
 export function BottomNav() {
+  const { employee } = useAuthStore();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!employee?.id) return;
+    
+    const loadUnread = async () => {
+      try {
+        const count = await getTotalUnreadCount(employee.id);
+        setUnreadCount(count);
+      } catch {
+        // 테이블 없으면 무시
+      }
+    };
+    
+    loadUnread();
+    const interval = setInterval(loadUnread, 30000);
+    return () => clearInterval(interval);
+  }, [employee?.id]);
+
   const navItems: NavItem[] = [
     { path: '/', label: '출퇴근', icon: <Clock size={22} /> },
     { path: '/payroll', label: '급여', icon: <Wallet size={22} /> },
     { path: '/leave', label: '휴가', icon: <CalendarDays size={22} /> },
-    { path: '/messenger', label: '메신저', icon: <MessageSquare size={22} /> },
+    { path: '/messenger', label: '메신저', icon: <MessageSquare size={22} />, showBadge: true },
     { path: '/profile', label: '내정보', icon: <User size={22} /> },
   ];
 
@@ -37,6 +61,11 @@ export function BottomNav() {
           >
             {item.icon}
             <span className="text-xs font-medium md:text-sm">{item.label}</span>
+            {item.showBadge && unreadCount > 0 && (
+              <span className="absolute -top-0.5 right-0.5 md:relative md:top-auto md:right-auto md:ml-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center px-1">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </div>
