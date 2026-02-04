@@ -338,6 +338,7 @@ export function MessengerPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [showChatView, setShowChatView] = useState(false);
+  const [setupRequired, setSetupRequired] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -346,8 +347,13 @@ export function MessengerPage() {
     try {
       const data = await getConversations(currentUserId);
       setConversations(data);
-    } catch (error) {
+      setSetupRequired(false);
+    } catch (error: unknown) {
       console.error('Failed to load conversations:', error);
+      // 테이블이 없는 경우 (401/404 오류)
+      if (error && typeof error === 'object' && 'code' in error) {
+        setSetupRequired(true);
+      }
     }
   }, [currentUserId]);
 
@@ -365,8 +371,12 @@ export function MessengerPage() {
     const init = async () => {
       setIsLoading(true);
       await loadConversations();
-      const emps = await getEmployeeList();
-      setEmployees(emps);
+      try {
+        const emps = await getEmployeeList();
+        setEmployees(emps);
+      } catch (e) {
+        console.error('Failed to load employees:', e);
+      }
       setIsLoading(false);
     };
     init();
@@ -475,6 +485,23 @@ export function MessengerPage() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500" />
+      </div>
+    );
+  }
+
+  // 메신저 테이블이 없는 경우
+  if (setupRequired) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-gray-500 p-8">
+        <MessageSquare size={64} className="mb-4 opacity-30" />
+        <h2 className="text-xl font-bold text-gray-700 mb-2">메신저 준비 중</h2>
+        <p className="text-center text-sm mb-4">
+          메신저 기능을 사용하기 위해<br />
+          관리자의 설정이 필요합니다.
+        </p>
+        <p className="text-xs text-gray-400">
+          관리자에게 문의해주세요.
+        </p>
       </div>
     );
   }
