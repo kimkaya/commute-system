@@ -1192,3 +1192,67 @@ export async function updateGroupName(
   
   await sendMessage(conversationId, updatedBy, `채팅방 이름이 "${newName}"(으)로 변경되었습니다.`, 'system');
 }
+
+// =====================================================
+// 파일 업로드 API
+// =====================================================
+
+// 파일을 Supabase Storage에 업로드
+export async function uploadMessageFile(
+  conversationId: string,
+  file: File,
+  employeeId: string
+): Promise<MessageAttachment> {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+  const filePath = `conversations/${conversationId}/${fileName}`;
+
+  const { data, error } = await supabase.storage
+    .from('messenger-files')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+  if (error) throw error;
+
+  const { data: publicUrlData } = supabase.storage
+    .from('messenger-files')
+    .getPublicUrl(filePath);
+
+  // 이미지인 경우 썸네일 URL도 생성 (옵션)
+  const isImage = file.type.startsWith('image/');
+  let thumbnailUrl = undefined;
+  if (isImage) {
+    thumbnailUrl = publicUrlData.publicUrl;
+  }
+
+  return {
+    name: file.name,
+    url: publicUrlData.publicUrl,
+    size: file.size,
+    type: file.type,
+    thumbnail_url: thumbnailUrl,
+  };
+}
+
+// 여러 파일을 한 번에 업로드
+export async function uploadMessageFiles(
+  conversationId: string,
+  files: File[],
+  employeeId: string
+): Promise<MessageAttachment[]> {
+  const uploadPromises = files.map(file => uploadMessageFile(conversationId, file, employeeId));
+  return Promise.all(uploadPromises);
+}
+
+// 클립보드에서 이미지 업로드
+export async function uploadClipboardImage(
+  conversationId: string,
+  blob: Blob,
+  employeeId: string
+): Promise<MessageAttachment> {
+  const fileName = `clipboard_${Date.now()}.png`;
+  const file = new File([blob], fileName, { type: 'image/png' });
+  return uploadMessageFile(conversationId, file, employeeId);
+}

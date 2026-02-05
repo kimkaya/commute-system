@@ -19,6 +19,9 @@ import {
   ChevronLeft,
   MoreVertical,
   UserPlus,
+  Paperclip,
+  File as FileIcon,
+  Download,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import {
@@ -36,8 +39,10 @@ import {
   addGroupMembers,
   removeGroupMember,
   updateGroupName,
+  uploadMessageFiles,
+  uploadClipboardImage,
 } from '../../lib/api';
-import type { Conversation, Message, Employee } from '../../lib/api';
+import type { Conversation, Message, Employee, MessageAttachment } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -145,6 +150,10 @@ function MessageItem({
     );
   }
 
+  const hasAttachments = message.attachments && message.attachments.length > 0;
+  const images = message.attachments?.filter(a => a.type.startsWith('image/')) || [];
+  const files = message.attachments?.filter(a => !a.type.startsWith('image/')) || [];
+
   return (
     <div
       className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-2 group`}
@@ -166,14 +175,63 @@ function MessageItem({
           )}
 
           <div className="relative">
-            <div className={`px-3 py-2 rounded-2xl text-sm ${
+            <div className={`rounded-2xl text-sm ${
               isOwnMessage ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-900'
-            } ${message.is_edited ? 'pb-4' : ''}`}>
-              <p className="whitespace-pre-wrap break-words">{message.content}</p>
-              {message.is_edited && (
-                <span className={`absolute bottom-1 right-2 text-[10px] ${isOwnMessage ? 'text-primary-200' : 'text-gray-400'}`}>
-                  (수정됨)
-                </span>
+            }`}>
+              {/* 이미지 첨부파일 */}
+              {images.length > 0 && (
+                <div className={`${images.length > 1 ? 'grid grid-cols-2 gap-1' : ''} ${message.content ? 'mb-2' : ''}`}>
+                  {images.map((img, idx) => (
+                    <a 
+                      key={idx} 
+                      href={img.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="block rounded-lg overflow-hidden"
+                    >
+                      <img 
+                        src={img.url} 
+                        alt={img.name}
+                        className="max-w-full h-auto max-h-60 object-cover hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {/* 일반 파일 첨부파일 */}
+              {files.length > 0 && (
+                <div className={`space-y-1 ${message.content ? 'mb-2' : ''}`}>
+                  {files.map((file, idx) => (
+                    <a
+                      key={idx}
+                      href={file.url}
+                      download={file.name}
+                      className={`flex items-center gap-2 p-2 rounded-lg ${
+                        isOwnMessage ? 'bg-primary-600 hover:bg-primary-700' : 'bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <FileIcon size={16} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{file.name}</p>
+                        <p className="text-[10px] opacity-70">{(file.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                      <Download size={14} />
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {/* 텍스트 내용 */}
+              {message.content && (
+                <div className={`${hasAttachments ? '' : 'px-3 py-2'} ${!hasAttachments && message.is_edited ? 'pb-4' : ''}`}>
+                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  {message.is_edited && (
+                    <span className={`absolute bottom-1 right-2 text-[10px] ${isOwnMessage ? 'text-primary-200' : 'text-gray-400'}`}>
+                      (수정됨)
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
@@ -568,9 +626,13 @@ export function MessengerPage() {
   const [showChatView, setShowChatView] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -641,7 +703,7 @@ export function MessengerPage() {
   }, [activeConversation, currentUserId]);
 
   const handleSendMessage = async () => {
-    if (!messageInput.trim() || !activeConversation || isSending) return;
+    if ((!messageInput.trim() && attachments.length === 0) || !activeConversation || isSending) return;
     setIsSending(true);
     try {
       if (editingMessage) {
@@ -650,7 +712,12 @@ export function MessengerPage() {
         setEditingMessage(null);
         toast.success('메시지 수정됨');
       } else {
-        await sendMessage(activeConversation.id, currentUserId, messageInput);
+        const messageType = attachments.some(a => a.type.startsWith('image/')) ? 'image' : 
+                           attachments.length > 0 ? 'file' : 'text';
+        await sendMessage(activeConversation.id, currentUserId, messageInput, messageType, {
+          attachments: attachments.length > 0 ? attachments : undefined,
+        });
+        setAttachments([]);
       }
       setMessageInput('');
       loadConversations();
@@ -658,6 +725,49 @@ export function MessengerPage() {
       toast.error('전송 실패');
     }
     setIsSending(false);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    setIsUploading(true);
+    try {
+      const uploaded = await uploadMessageFiles(activeConversation!.id, files, currentUserId);
+      setAttachments(prev => [...prev, ...uploaded]);
+      toast.success(`${files.length}개 파일 업로드 완료`);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error('파일 업로드 실패');
+    }
+    setIsUploading(false);
+    if (e.target) e.target.value = '';
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(item => item.type.startsWith('image/'));
+    
+    if (imageItem) {
+      e.preventDefault();
+      const blob = imageItem.getAsFile();
+      if (!blob || !activeConversation) return;
+      
+      setIsUploading(true);
+      try {
+        const attachment = await uploadClipboardImage(activeConversation.id, blob, currentUserId);
+        setAttachments(prev => [...prev, attachment]);
+        toast.success('이미지 붙여넣기 완료');
+      } catch (error) {
+        console.error('Upload failed:', error);
+        toast.error('이미지 업로드 실패');
+      }
+      setIsUploading(false);
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDeleteMessage = async (messageId: string) => {
@@ -847,24 +957,86 @@ export function MessengerPage() {
               </div>
             )}
 
+            {/* 첨부파일 미리보기 */}
+            {attachments.length > 0 && (
+              <div className="px-3 py-2 bg-gray-50 border-t">
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((att, idx) => (
+                    <div key={idx} className="relative group">
+                      {att.type.startsWith('image/') ? (
+                        <div className="relative">
+                          <img src={att.url} alt={att.name} className="w-20 h-20 object-cover rounded-lg" />
+                          <button
+                            onClick={() => removeAttachment(idx)}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="relative flex items-center gap-2 px-3 py-2 bg-white border rounded-lg">
+                          <FileIcon size={16} className="text-gray-500" />
+                          <span className="text-xs max-w-[100px] truncate">{att.name}</span>
+                          <button
+                            onClick={() => removeAttachment(idx)}
+                            className="ml-1 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="p-3 border-t bg-white">
               <div className="flex items-end gap-2">
-                <button className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <button 
+                  onClick={() => imageInputRef.current?.click()} 
+                  disabled={isUploading}
+                  className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0 disabled:opacity-50"
+                >
                   <ImageIcon size={18} className="text-gray-500" />
+                </button>
+                <button 
+                  onClick={() => fileInputRef.current?.click()} 
+                  disabled={isUploading}
+                  className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0 disabled:opacity-50"
+                >
+                  <Paperclip size={18} className="text-gray-500" />
                 </button>
                 <textarea
                   ref={inputRef}
                   value={messageInput}
                   onChange={e => setMessageInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                  placeholder="메시지 입력..."
+                  onPaste={handlePaste}
+                  placeholder={isUploading ? "업로드 중..." : "메시지 입력... (Ctrl+V로 이미지 붙여넣기)"}
+                  disabled={isUploading}
                   rows={1}
-                  className="flex-1 px-3 py-2 bg-gray-100 rounded-2xl resize-none text-sm focus:ring-2 focus:ring-primary-500 focus:bg-white"
+                  className="flex-1 px-3 py-2 bg-gray-100 rounded-2xl resize-none text-sm focus:ring-2 focus:ring-primary-500 focus:bg-white disabled:opacity-50"
                   style={{ minHeight: '38px', maxHeight: '100px' }}
                 />
                 <button
                   onClick={handleSendMessage}
-                  disabled={!messageInput.trim() || isSending}
+                  disabled={(!messageInput.trim() && attachments.length === 0) || isSending || isUploading}
                   className="p-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 flex-shrink-0"
                 >
                   <Send size={18} />
