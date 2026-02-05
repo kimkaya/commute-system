@@ -18,6 +18,7 @@ import {
   X,
   ChevronLeft,
   MoreVertical,
+  UserPlus,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import {
@@ -32,6 +33,9 @@ import {
   createGroupConversation,
   getOrCreateDirectConversation,
   getEmployeeList,
+  addGroupMembers,
+  removeGroupMember,
+  updateGroupName,
 } from '../../lib/api';
 import type { Conversation, Message, Employee } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
@@ -244,6 +248,8 @@ function NewConversationModal({
     e.id !== currentUserId && e.is_active && e.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  const selectedEmployees = employees.filter(e => selectedMembers.includes(e.id) && e.id !== currentUserId);
+
   const handleCreateGroup = () => {
     if (!groupName.trim()) { toast.error('그룹 이름을 입력하세요'); return; }
     if (selectedMembers.length < 2) { toast.error('최소 2명 이상 선택하세요'); return; }
@@ -254,23 +260,37 @@ function NewConversationModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl w-full max-w-md max-h-[80vh] flex flex-col">
         <div className="p-4 border-b flex items-center justify-between">
-          <h2 className="text-lg font-bold">{mode === 'select' ? '새 대화' : '그룹 만들기'}</h2>
+          <h2 className="text-lg font-bold">{mode === 'select' ? '새 대화' : '단톡방 만들기'}</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
         </div>
 
         <div className="flex border-b">
-          <button onClick={() => setMode('select')} className={`flex-1 py-2 text-sm font-medium ${mode === 'select' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500'}`}>
+          <button onClick={() => setMode('select')} className={`flex-1 py-3 text-sm font-medium ${mode === 'select' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500'}`}>
             1:1 대화
           </button>
-          <button onClick={() => setMode('group')} className={`flex-1 py-2 text-sm font-medium ${mode === 'group' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500'}`}>
-            그룹 채팅
+          <button onClick={() => setMode('group')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-1 ${mode === 'group' ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500'}`}>
+            <Users size={16} />
+            단톡방
           </button>
         </div>
 
         {mode === 'group' && (
-          <div className="p-3 border-b">
-            <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="그룹 이름"
+          <div className="p-3 border-b bg-gray-50">
+            <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="단톡방 이름을 입력하세요 (예: 개발팀 회의)"
               className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+            
+            {selectedEmployees.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {selectedEmployees.map(emp => (
+                  <span key={emp.id} className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs">
+                    {emp.name}
+                    <button onClick={() => setSelectedMembers(prev => prev.filter(id => id !== emp.id))} className="hover:bg-primary-200 rounded-full">
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -311,10 +331,218 @@ function NewConversationModal({
         </div>
 
         {mode === 'group' && (
-          <div className="p-3 border-t">
-            <button onClick={handleCreateGroup} className="w-full py-2.5 bg-primary-500 text-white rounded-lg font-medium hover:bg-primary-600 text-sm">
-              그룹 만들기 ({selectedMembers.length}명)
+          <div className="p-3 border-t bg-gray-50">
+            <button 
+              onClick={handleCreateGroup} 
+              disabled={selectedMembers.length < 2 || !groupName.trim()}
+              className="w-full py-3 bg-primary-500 text-white rounded-lg font-medium hover:bg-primary-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <Users size={18} />
+              단톡방 만들기 ({selectedMembers.length}명)
             </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 그룹 정보 모달
+function GroupInfoModal({
+  isOpen, onClose, conversation, currentUserId, employees, onUpdate,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  conversation: Conversation;
+  currentUserId: string;
+  employees: Employee[];
+  onUpdate: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [groupName, setGroupName] = useState(conversation.name || '');
+  const [isAddingMembers, setIsAddingMembers] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedNewMembers, setSelectedNewMembers] = useState<string[]>([]);
+
+  const isAdmin = conversation.participants?.find(p => p.employee_id === currentUserId)?.role === 'admin';
+  const currentMembers = conversation.participants?.filter(p => p.is_active) || [];
+  const currentMemberIds = currentMembers.map(p => p.employee_id);
+  
+  const availableEmployees = employees.filter(e => 
+    !currentMemberIds.includes(e.id) && 
+    e.is_active && 
+    e.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (!isOpen) return null;
+
+  const handleUpdateName = async () => {
+    if (!groupName.trim()) { toast.error('그룹 이름을 입력하세요'); return; }
+    try {
+      await updateGroupName(conversation.id, groupName, currentUserId);
+      setIsEditing(false);
+      onUpdate();
+      toast.success('그룹 이름 변경됨');
+    } catch { toast.error('변경 실패'); }
+  };
+
+  const handleAddMembers = async () => {
+    if (selectedNewMembers.length === 0) { toast.error('멤버를 선택하세요'); return; }
+    try {
+      await addGroupMembers(conversation.id, selectedNewMembers, currentUserId);
+      setIsAddingMembers(false);
+      setSelectedNewMembers([]);
+      setSearchQuery('');
+      onUpdate();
+      toast.success('멤버 추가됨');
+    } catch { toast.error('추가 실패'); }
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    if (!confirm('정말 내보낼까요?')) return;
+    try {
+      await removeGroupMember(conversation.id, memberId, currentUserId);
+      onUpdate();
+      toast.success('멤버 제거됨');
+    } catch { toast.error('제거 실패'); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-md max-h-[80vh] flex flex-col">
+        <div className="p-4 border-b flex items-center justify-between">
+          <h2 className="text-lg font-bold">그룹 정보</h2>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X size={20} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* 그룹 이름 */}
+          <div className="p-4 border-b">
+            <div className="flex items-center justify-center mb-3">
+              <div className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center text-white">
+                <Users size={28} />
+              </div>
+            </div>
+            {isEditing ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={groupName}
+                  onChange={e => setGroupName(e.target.value)}
+                  className="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                  placeholder="그룹 이름"
+                  autoFocus
+                />
+                <button onClick={handleUpdateName} className="px-3 py-2 bg-primary-500 text-white rounded-lg text-sm hover:bg-primary-600">
+                  <Check size={16} />
+                </button>
+                <button onClick={() => { setIsEditing(false); setGroupName(conversation.name || ''); }} className="px-3 py-2 bg-gray-200 rounded-lg text-sm hover:bg-gray-300">
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2">
+                <h3 className="text-lg font-bold text-center">{conversation.name || '그룹 채팅'}</h3>
+                {isAdmin && (
+                  <button onClick={() => setIsEditing(true)} className="p-1 hover:bg-gray-100 rounded">
+                    <Edit2 size={14} className="text-gray-500" />
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="text-center text-sm text-gray-500 mt-1">{currentMembers.length}명</p>
+          </div>
+
+          {/* 멤버 목록 */}
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-bold text-sm">멤버 ({currentMembers.length})</h4>
+              {isAdmin && (
+                <button onClick={() => setIsAddingMembers(true)} className="flex items-center gap-1 text-primary-600 text-sm hover:underline">
+                  <UserPlus size={14} />
+                  추가
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {currentMembers.map(participant => (
+                <div key={participant.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg">
+                  <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-medium text-sm">
+                    {participant.employee?.name?.charAt(0) || '?'}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{participant.employee?.name || '알 수 없음'}</p>
+                    <p className="text-xs text-gray-500">{participant.employee?.department || '부서 미지정'}</p>
+                  </div>
+                  {participant.role === 'admin' && (
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">관리자</span>
+                  )}
+                  {isAdmin && participant.employee_id !== currentUserId && participant.role !== 'admin' && (
+                    <button onClick={() => handleRemoveMember(participant.employee_id)} className="p-1 hover:bg-red-100 rounded text-red-600">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 멤버 추가 모드 */}
+        {isAddingMembers && (
+          <div className="absolute inset-0 bg-white rounded-xl flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-bold">멤버 추가</h3>
+              <button onClick={() => { setIsAddingMembers(false); setSelectedNewMembers([]); setSearchQuery(''); }} className="p-1 hover:bg-gray-100 rounded">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-3 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="직원 검색..."
+                  className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {availableEmployees.map(emp => (
+                <button
+                  key={emp.id}
+                  onClick={() => setSelectedNewMembers(prev => prev.includes(emp.id) ? prev.filter(id => id !== emp.id) : [...prev, emp.id])}
+                  className="w-full p-3 flex items-center gap-3 hover:bg-gray-50 border-b"
+                >
+                  <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-medium text-sm">
+                    {emp.name.charAt(0)}
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-sm">{emp.name}</p>
+                    <p className="text-xs text-gray-500">{emp.department || '부서 미지정'}</p>
+                  </div>
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                    selectedNewMembers.includes(emp.id) ? 'bg-primary-500 border-primary-500' : 'border-gray-300'
+                  }`}>
+                    {selectedNewMembers.includes(emp.id) && <Check size={14} className="text-white" />}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="p-3 border-t">
+              <button
+                onClick={handleAddMembers}
+                disabled={selectedNewMembers.length === 0}
+                className="w-full py-2.5 bg-primary-500 text-white rounded-lg font-medium hover:bg-primary-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                추가하기 ({selectedNewMembers.length}명)
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -339,6 +567,7 @@ export function MessengerPage() {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [showChatView, setShowChatView] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -468,6 +697,14 @@ export function MessengerPage() {
     } catch { toast.error('그룹 생성 실패'); }
   };
 
+  const handleGroupUpdate = async () => {
+    if (activeConversation) {
+      const updated = await getConversation(activeConversation.id);
+      setActiveConversation(updated);
+      await loadConversations();
+    }
+  };
+
   const getConversationName = (conv: Conversation) => {
     if (conv.type === 'direct') {
       const other = conv.participants?.find(p => p.employee_id !== currentUserId);
@@ -569,7 +806,10 @@ export function MessengerPage() {
                   {activeConversation.type === 'group' ? `${activeConversation.participants?.length || 0}명` : '온라인'}
                 </p>
               </div>
-              <button className="p-2 hover:bg-gray-100 rounded-lg">
+              <button 
+                onClick={() => activeConversation.type === 'group' && setShowGroupInfo(true)} 
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
                 <MoreVertical size={18} className="text-gray-500" />
               </button>
             </div>
@@ -652,6 +892,17 @@ export function MessengerPage() {
         employees={employees}
         currentUserId={currentUserId}
       />
+
+      {activeConversation && activeConversation.type === 'group' && (
+        <GroupInfoModal
+          isOpen={showGroupInfo}
+          onClose={() => setShowGroupInfo(false)}
+          conversation={activeConversation}
+          currentUserId={currentUserId}
+          employees={employees}
+          onUpdate={handleGroupUpdate}
+        />
+      )}
     </div>
   );
 }

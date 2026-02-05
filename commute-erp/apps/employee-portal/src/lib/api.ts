@@ -1133,3 +1133,62 @@ export async function getEmployeeList(): Promise<Employee[]> {
   if (error) throw error;
   return data || [];
 }
+
+// 그룹 채팅방에 멤버 추가
+export async function addGroupMembers(
+  conversationId: string,
+  memberIds: string[],
+  addedBy: string
+): Promise<void> {
+  const participants = memberIds.map(empId => ({
+    conversation_id: conversationId,
+    employee_id: empId,
+    role: 'member' as const,
+  }));
+  
+  await supabase.from('conversation_participants').insert(participants);
+  
+  // 시스템 메시지 추가
+  const { data: employees } = await supabase
+    .from('employees')
+    .select('name')
+    .in('id', memberIds);
+  const names = employees?.map(e => e.name).join(', ') || '멤버';
+  await sendMessage(conversationId, addedBy, `${names}님이 초대되었습니다.`, 'system');
+}
+
+// 그룹 채팅방에서 멤버 제거
+export async function removeGroupMember(
+  conversationId: string,
+  memberId: string,
+  removedBy: string
+): Promise<void> {
+  await supabase
+    .from('conversation_participants')
+    .update({ is_active: false })
+    .eq('conversation_id', conversationId)
+    .eq('employee_id', memberId);
+  
+  // 시스템 메시지 추가
+  const { data: employee } = await supabase
+    .from('employees')
+    .select('name')
+    .eq('id', memberId)
+    .limit(1);
+  const name = employee?.[0]?.name || '멤버';
+  await sendMessage(conversationId, removedBy, `${name}님이 나갔습니다.`, 'system');
+}
+
+// 그룹 이름 변경
+export async function updateGroupName(
+  conversationId: string,
+  newName: string,
+  updatedBy: string
+): Promise<void> {
+  await supabase
+    .from('conversations')
+    .update({ name: newName })
+    .eq('id', conversationId);
+  
+  await sendMessage(conversationId, updatedBy, `채팅방 이름이 "${newName}"(으)로 변경되었습니다.`, 'system');
+}
