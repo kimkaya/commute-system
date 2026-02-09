@@ -1009,6 +1009,7 @@ export async function sendMessage(
     mentions?: string[];
   }
 ): Promise<Message> {
+  // 1. 메시지 삽입
   const { data, error } = await supabase
     .from('messages')
     .insert({
@@ -1025,6 +1026,43 @@ export async function sendMessage(
   
   if (error) throw error;
   
+  // 2. conversation 업데이트 (last_message_at, last_message_preview)
+  const preview = messageType === 'image' ? '📷 이미지' :
+                 messageType === 'file' ? '📎 파일' :
+                 content || '메시지';
+  
+  await supabase
+    .from('conversations')
+    .update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: preview.substring(0, 100),
+    })
+    .eq('id', conversationId);
+  
+  // 3. 참여자들의 unread_count 증가 (발신자 제외)
+  const { data: participants } = await supabase
+    .from('conversation_participants')
+    .select('employee_id, unread_count')
+    .eq('conversation_id', conversationId)
+    .eq('is_active', true)
+    .neq('employee_id', senderId);
+  
+  if (participants && participants.length > 0) {
+    // 각 참여자의 unread_count를 1씩 증가
+    const updatePromises = participants.map(p =>
+      supabase
+        .from('conversation_participants')
+        .update({ 
+          unread_count: (p.unread_count || 0) + 1 
+        })
+        .eq('conversation_id', conversationId)
+        .eq('employee_id', p.employee_id)
+    );
+    
+    await Promise.all(updatePromises);
+  }
+  
+  // 4. 발신자 정보 조회
   const { data: sender } = await supabase
     .from('employees')
     .select('*')
