@@ -20,7 +20,8 @@ import { format, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../stores/authStore';
-import { getMyLeaves, getLeaveBalance, requestLeave, cancelLeave, type Leave } from '../../lib/api';
+import { getMyLeaves, getLeaveBalance, requestLeave, cancelLeave } from '../../lib/api';
+import type { Leave } from '../../lib/api';
 
 // 휴가 유형
 const leaveTypes = [

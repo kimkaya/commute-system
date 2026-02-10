@@ -38,7 +38,7 @@ interface autoTableOptions {
   margin?: { left?: number; right?: number };
 }
 
-export interface PayslipData {
+export type PayslipData = {
   // 직원 정보
   employeeName: string;
   employeeNumber: string;

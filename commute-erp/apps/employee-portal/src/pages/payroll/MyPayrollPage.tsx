@@ -17,8 +17,10 @@ import {
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useAuthStore } from '../../stores/authStore';
-import { getMyPayslips, type PayrollLine } from '../../lib/api';
-import { generatePayslipPdf, type PayslipData } from '../../lib/payslipPdf';
+import { getMyPayslips } from '../../lib/api';
+import type { PayrollLine } from '../../lib/api';
+import { generatePayslipPdf } from '../../lib/payslipPdf';
+import type { PayslipData } from '../../lib/payslipPdf';
 import toast from 'react-hot-toast';
 
 interface PayrollDisplayData {
