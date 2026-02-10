@@ -1294,3 +1294,195 @@ export async function uploadClipboardImage(
   const file = new File([blob], fileName, { type: 'image/png' });
   return uploadMessageFile(conversationId, file, employeeId);
 }
+
+// =====================================================
+// 문서 양식 관리 API
+// =====================================================
+
+export interface DocumentTemplate {
+  id: string;
+  business_id: string;
+  name: string;
+  description: string | null;
+  category: 'leave' | 'business_trip' | 'overtime' | 'expense' | 'other';
+  file_url: string | null;
+  file_name: string | null;
+  fields: TemplateField[];
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TemplateField {
+  name: string;
+  label: string;
+  type: 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select';
+  auto_fill?: string;
+  options?: string[];
+  required?: boolean;
+}
+
+export interface DocumentRequest {
+  id: string;
+  business_id: string;
+  template_id: string | null;
+  employee_id: string;
+  title: string;
+  category: string;
+  fields_data: Record<string, any>;
+  status: 'draft' | 'pending' | 'approved' | 'rejected' | 'cancelled';
+  submitted_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejected_reason: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  template?: DocumentTemplate;
+  employee?: Employee;
+  approver?: Employee;
+}
+
+export async function getDocumentTemplates(): Promise<DocumentTemplate[]> {
+  const { data, error } = await supabase
+    .from('document_templates')
+    .select('*')
+    .eq('business_id', BUSINESS_ID)
+    .eq('is_active', true)
+    .order('category', { ascending: true })
+    .order('name', { ascending: true });
+  
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getDocumentTemplate(id: string): Promise<DocumentTemplate | null> {
+  const { data, error } = await supabase
+    .from('document_templates')
+    .select('*')
+    .eq('id', id)
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function createDocumentRequest(
+  templateId: string,
+  employeeId: string,
+  title: string,
+  category: string,
+  fieldsData: Record<string, any>,
+  status: 'draft' | 'pending' = 'draft'
+): Promise<DocumentRequest> {
+  const { data, error } = await supabase
+    .from('document_requests')
+    .insert({
+      business_id: BUSINESS_ID,
+      template_id: templateId,
+      employee_id: employeeId,
+      title,
+      category,
+      fields_data: fieldsData,
+      status,
+      submitted_at: status === 'pending' ? new Date().toISOString() : null,
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function updateDocumentRequest(
+  id: string,
+  fieldsData: Record<string, any>,
+  status?: 'draft' | 'pending'
+): Promise<DocumentRequest> {
+  const updateData: any = {
+    fields_data: fieldsData,
+    updated_at: new Date().toISOString(),
+  };
+  
+  if (status) {
+    updateData.status = status;
+    if (status === 'pending') {
+      updateData.submitted_at = new Date().toISOString();
+    }
+  }
+  
+  const { data, error } = await supabase
+    .from('document_requests')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function getMyDocumentRequests(employeeId: string): Promise<DocumentRequest[]> {
+  const { data, error } = await supabase
+    .from('document_requests')
+    .select(`
+      *,
+      template:template_id(*)
+    `)
+    .eq('business_id', BUSINESS_ID)
+    .eq('employee_id', employeeId)
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getDocumentRequest(id: string): Promise<DocumentRequest | null> {
+  const { data, error } = await supabase
+    .from('document_requests')
+    .select(`
+      *,
+      template:template_id(*),
+      employee:employee_id(*),
+      approver:approved_by(*)
+    `)
+    .eq('id', id)
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteDocumentRequest(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('document_requests')
+    .delete()
+    .eq('id', id)
+    .eq('status', 'draft');
+  
+  if (error) throw error;
+}
+
+export async function cancelDocumentRequest(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('document_requests')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', id);
+  
+  if (error) throw error;
+}
+
+export function generateAutoFillData(employee: any): Record<string, any> {
+  const today = new Date();
+  return {
+    'employee.name': employee.name || '',
+    'employee.employee_id': employee.employee_number || employee.employee_id || '',
+    'employee.department': employee.department || '',
+    'employee.position': employee.position || '',
+    'employee.email': employee.email || '',
+    'employee.phone': employee.phone || employee.phone_number || '',
+    'today': today.toISOString().split('T')[0],
+    'now': today.toISOString(),
+  };
+}

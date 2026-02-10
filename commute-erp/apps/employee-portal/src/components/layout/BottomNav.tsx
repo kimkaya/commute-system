@@ -3,7 +3,7 @@
 // =====================================================
 
 import { NavLink } from 'react-router-dom';
-import { Clock, Wallet, CalendarDays, MessageSquare, User } from 'lucide-react';
+import { Clock, Wallet, CalendarDays, MessageSquare, User, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getTotalUnreadCount } from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
@@ -40,6 +40,7 @@ export function BottomNav() {
     { path: '/', label: '출퇴근', icon: <Clock size={22} /> },
     { path: '/payroll', label: '급여', icon: <Wallet size={22} /> },
     { path: '/leave', label: '휴가', icon: <CalendarDays size={22} /> },
+    { path: '/documents', label: '문서', icon: <FileText size={22} /> },
     { path: '/messenger', label: '메신저', icon: <MessageSquare size={22} />, showBadge: true },
     { path: '/profile', label: '내정보', icon: <User size={22} /> },
   ];
