@@ -15,7 +15,7 @@ const BUSINESS_ID = '00000000-0000-0000-0000-000000000001';
 // 타입 정의
 // =====================================================
 
-export interface Employee {
+export type Employee = {
   id: string;
   business_id: string;
   employee_number: string | null;
@@ -31,7 +31,7 @@ export interface Employee {
   is_active: boolean;
 }
 
-export interface AttendanceRecord {
+export type AttendanceRecord = {
   id: string;
   employee_id: string;
   date: string;
@@ -45,7 +45,7 @@ export interface AttendanceRecord {
   check_out_method: string | null;
 }
 
-export interface Leave {
+export type Leave = {
   id: string;
   employee_id: string;
   type: string;
@@ -58,7 +58,7 @@ export interface Leave {
   review_notes: string | null;
 }
 
-export interface PayrollLine {
+export type PayrollLine = {
   id: string;
   employee_id: string;
   payroll_period_id: string;
@@ -83,7 +83,7 @@ export interface PayrollLine {
 // 직원 로그인 (멀티사업장 - 이메일 형식)
 // =====================================================
 
-export interface LoginResponse {
+export type LoginResponse = {
   success: boolean;
   employee?: Employee & { business_name?: string; company_code?: string };
   business_id?: string;
@@ -165,7 +165,7 @@ export async function validateInviteCode(inviteCode: string): Promise<{
 // 직원 회원가입
 // =====================================================
 
-export interface EmployeeRegisterParams {
+export type EmployeeRegisterParams = {
   invite_code: string;
   username: string;
   password: string;
@@ -559,7 +559,7 @@ export async function changePassword(employeeId: string, currentPassword: string
 // 문의 API
 // =====================================================
 
-export interface Inquiry {
+export type Inquiry = {
   employee_id: string;
   employee_name: string;
   employee_number: string;
@@ -619,7 +619,7 @@ export async function createInquiry(inquiry: Inquiry): Promise<{
 // 직원 알림 API
 // =====================================================
 
-export interface EmployeeNotification {
+export type EmployeeNotification = {
   id: string;
   type: string;
   title: string;
@@ -707,7 +707,7 @@ export async function markAllNotificationsAsRead(employeeId: string): Promise<vo
 // 사내 메신저 API
 // =====================================================
 
-export interface Conversation {
+export type Conversation = {
   id: string;
   business_id: string;
   type: 'direct' | 'group' | 'channel';
@@ -725,7 +725,7 @@ export interface Conversation {
   unread_count?: number;
 }
 
-export interface ConversationParticipant {
+export type ConversationParticipant = {
   id: string;
   conversation_id: string;
   employee_id: string;
@@ -740,7 +740,7 @@ export interface ConversationParticipant {
   employee?: Employee;
 }
 
-export interface Message {
+export type Message = {
   id: string;
   conversation_id: string;
   sender_id: string;
@@ -762,7 +762,7 @@ export interface Message {
   reactions?: MessageReaction[];
 }
 
-export interface MessageAttachment {
+export type MessageAttachment = {
   name: string;
   url: string;
   size: number;
@@ -770,7 +770,7 @@ export interface MessageAttachment {
   thumbnail_url?: string;
 }
 
-export interface MessageReaction {
+export type MessageReaction = {
   id: string;
   message_id: string;
   employee_id: string;
@@ -1299,7 +1299,7 @@ export async function uploadClipboardImage(
 // 문서 양식 관리 API
 // =====================================================
 
-export interface DocumentTemplate {
+export type DocumentTemplate = {
   id: string;
   business_id: string;
   name: string;
@@ -1314,7 +1314,7 @@ export interface DocumentTemplate {
   updated_at: string;
 }
 
-export interface TemplateField {
+export type TemplateField = {
   name: string;
   label: string;
   type: 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select';
@@ -1323,7 +1323,7 @@ export interface TemplateField {
   required?: boolean;
 }
 
-export interface DocumentRequest {
+export type DocumentRequest = {
   id: string;
   business_id: string;
   template_id: string | null;
