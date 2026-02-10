@@ -14,8 +14,10 @@ import {
   deleteDocumentRequest,
   cancelDocumentRequest,
   generateAutoFillData,
+  type DocumentTemplate,
+  type DocumentRequest,
+  type TemplateField,
 } from '../../lib/api';
-import type { DocumentTemplate, DocumentRequest, TemplateField } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 

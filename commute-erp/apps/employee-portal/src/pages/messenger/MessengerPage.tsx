@@ -41,8 +41,11 @@ import {
   updateGroupName,
   uploadMessageFiles,
   uploadClipboardImage,
+  type Conversation,
+  type Message,
+  type Employee,
+  type MessageAttachment,
 } from '../../lib/api';
-import type { Conversation, Message, Employee, MessageAttachment } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { format, isToday, isYesterday } from 'date-fns';
