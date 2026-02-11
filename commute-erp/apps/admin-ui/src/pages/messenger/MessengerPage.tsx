@@ -43,6 +43,8 @@ import {
   toggleMuteConversation,
   getEmployees,
   getTotalUnreadCount,
+} from '../../lib/api';
+import type {
   Conversation,
   Message,
   Employee,

@@ -14,10 +14,10 @@ interface RegisterRequest {
   description?: string;
 }
 
-// 랜덤 기기코드 생성
+// 랜덤 기기코드 생성 (8자리)
 function generateDeviceCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'DEV-';
+  let code = '';
   for (let i = 0; i < 8; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }

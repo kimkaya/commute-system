@@ -16,7 +16,7 @@ const BUSINESS_ID = '00000000-0000-0000-0000-000000000001';
 // 타입 정의
 // =====================================================
 
-export interface Employee {
+export type Employee = {
   id: string;
   business_id: string;
   employee_number: string | null;
@@ -55,7 +55,7 @@ export interface Employee {
   local_income_tax_rate?: number | null;     // 지방소득세 요율 (NULL=소득세의 10%)
 }
 
-export interface AttendanceRecord {
+export type AttendanceRecord = {
   id: string;
   business_id: string;
   employee_id: string;
@@ -74,7 +74,7 @@ export interface AttendanceRecord {
   employee?: Employee;
 }
 
-export interface Leave {
+export type Leave = {
   id: string;
   business_id: string;
   employee_id: string;
@@ -91,7 +91,7 @@ export interface Leave {
   employee?: Employee;
 }
 
-export interface PayrollPeriod {
+export type PayrollPeriod = {
   id: string;
   business_id: string;
   year: number;
@@ -101,7 +101,7 @@ export interface PayrollPeriod {
   status: 'open' | 'processing' | 'closed';
 }
 
-export interface PayrollLine {
+export type PayrollLine = {
   id: string;
   business_id: string;
   payroll_run_id: string;
@@ -121,7 +121,7 @@ export interface PayrollLine {
   employee?: Employee;
 }
 
-export interface Schedule {
+export type Schedule = {
   id: string;
   business_id: string;
   employee_id: string;
@@ -134,7 +134,7 @@ export interface Schedule {
   employee?: Employee;
 }
 
-export interface SystemSettings {
+export type SystemSettings = {
   id: string;
   business_id: string;
   admin_password_hash: string | null;
@@ -149,7 +149,7 @@ export interface SystemSettings {
   face_match_threshold: number;
 }
 
-export interface Notification {
+export type Notification = {
   id: string;
   business_id: string;
   type: 'leave_request' | 'leave_approved' | 'leave_rejected' | 'payroll_confirmed' | 'schedule_change' | 'system' | 'reminder';
@@ -164,7 +164,7 @@ export interface Notification {
   metadata: Record<string, unknown> | null;
 }
 
-export interface ComplianceCheck {
+export type ComplianceCheck = {
   id: string;
   business_id: string;
   check_type: 'weekly_hours' | 'overtime' | 'rest_period' | 'annual_leave' | 'night_work';
@@ -508,7 +508,7 @@ export async function rejectLeave(id: string, reviewNotes?: string): Promise<Lea
 }
 
 // 휴가 잔여 조회
-export interface LeaveBalance {
+export type LeaveBalance = {
   employee_id: string;
   year: number;
   annual_total: number;
@@ -887,7 +887,7 @@ export async function createEmployeeCredentials(employeeId: string, password: st
 // 급여 계산 API
 // =====================================================
 
-export interface PayrollCalculation {
+export type PayrollCalculation = {
   employeeId: string;
   employeeName: string;
   employeeNumber: string | null;
@@ -1184,7 +1184,7 @@ export async function markPayrollAsPaid(periodId: string): Promise<{ success: bo
 // 세금/공제 설정 API (LocalStorage 기반 - DB 확장 전까지)
 // =====================================================
 
-export interface TaxSettings {
+export type TaxSettings = {
   // 소득세
   incomeTaxRate: number;        // 소득세율 (기본 4%)
   localTaxRate: number;         // 지방소득세율 (소득세의 10%)
@@ -1281,7 +1281,7 @@ export function calculateTaxes(grossPay: number, settings?: TaxSettings) {
 // 간이세액표 기반 세금 계산 (개인별)
 // =====================================================
 
-export interface IncomeTaxTableRow {
+export type IncomeTaxTableRow = {
   id: number;
   min_salary: number;
   max_salary: number;
@@ -1491,7 +1491,7 @@ export async function calculateEmployeeTaxes(
 // Excel 템플릿 관리 API (LocalStorage 기반)
 // =====================================================
 
-export interface ExcelTemplate {
+export type ExcelTemplate = {
   id: string;
   name: string;
   description: string;
@@ -1503,7 +1503,7 @@ export interface ExcelTemplate {
   updatedAt: string;
 }
 
-export interface TemplateCellMapping {
+export type TemplateCellMapping = {
   cell: string;       // 예: "B5", "C10"
   field: string;      // 예: "employeeName", "grossPay", "incomeTax"
   format?: string;    // 예: "currency", "date", "number"
@@ -1683,7 +1683,7 @@ export const AVAILABLE_FIELDS = [
 ];
 
 // 급여 데이터를 필드 값으로 변환
-export interface PayrollDataForExcel {
+export type PayrollDataForExcel = {
   // 회사 정보
   companyName: string;
   businessNumber: string;
@@ -2454,7 +2454,7 @@ export async function getComplianceSummary(): Promise<{
 // 보안 설정 API (DB 연동)
 // =====================================================
 
-export interface SecuritySettings {
+export type SecuritySettings = {
   require_password_change_days: number;
   min_password_length: number;
   require_special_char: boolean;
@@ -2502,7 +2502,7 @@ export function saveSecuritySettings(settings: SecuritySettings): void {
 // 알림 설정 API
 // =====================================================
 
-export interface NotificationSettings {
+export type NotificationSettings = {
   email_enabled: boolean;
   email_leave_request: boolean;
   email_payroll_confirmed: boolean;
@@ -2550,7 +2550,7 @@ export function saveNotificationSettings(settings: NotificationSettings): void {
 // 사내 메신저 API
 // =====================================================
 
-export interface Conversation {
+export type Conversation = {
   id: string;
   business_id: string;
   type: 'direct' | 'group' | 'channel';
@@ -2568,7 +2568,7 @@ export interface Conversation {
   unread_count?: number;
 }
 
-export interface ConversationParticipant {
+export type ConversationParticipant = {
   id: string;
   conversation_id: string;
   employee_id: string;
@@ -2583,7 +2583,7 @@ export interface ConversationParticipant {
   employee?: Employee;
 }
 
-export interface Message {
+export type Message = {
   id: string;
   conversation_id: string;
   sender_id: string;
@@ -2605,7 +2605,7 @@ export interface Message {
   reactions?: MessageReaction[];
 }
 
-export interface MessageAttachment {
+export type MessageAttachment = {
   name: string;
   url: string;
   size: number;
@@ -2613,7 +2613,7 @@ export interface MessageAttachment {
   thumbnail_url?: string;
 }
 
-export interface MessageReaction {
+export type MessageReaction = {
   id: string;
   message_id: string;
   employee_id: string;

@@ -245,15 +245,15 @@ export function SettingsPage() {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
         },
         body: JSON.stringify({
-          business_id: businessId,
-          device_name: newKioskName.trim(),
+          businessId: businessId, // snake_case → camelCase 수정
+          deviceName: newKioskName.trim(), // snake_case → camelCase 수정
           location: newKioskLocation.trim() || null,
         }),
       });
       
       const data = await response.json();
       if (response.ok) {
-        toast.success(`키오스크가 등록되었습니다. 기기코드: ${data.device_code}`);
+        toast.success(`키오스크가 등록되었습니다. 기기코드: ${data.deviceCode || data.device_code}`);
         setShowAddKioskModal(false);
         setNewKioskName('');
         setNewKioskLocation('');
