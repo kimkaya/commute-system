@@ -43,6 +43,7 @@ import {
   getNotificationSettings,
   saveNotificationSettings,
   SUPABASE_URL,
+  SUPABASE_ANON_KEY,
 } from '../../lib/api';
 import type { TaxSettings, ExcelTemplate, TemplateCellMapping, SecuritySettings, NotificationSettings } from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
@@ -159,7 +160,7 @@ export function SettingsPage() {
     try {
       const response = await fetch(`${SUPABASE_URL}/rest/v1/businesses?id=eq.${businessId}&select=invite_code`, {
         headers: {
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          'apikey': SUPABASE_ANON_KEY,
           'Content-Type': 'application/json',
         },
       });
@@ -183,9 +184,9 @@ export function SettingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ business_id: businessId }),
+        body: JSON.stringify({ businessId }),
       });
       
       const data = await response.json();
@@ -216,7 +217,7 @@ export function SettingsPage() {
     try {
       const response = await fetch(`${SUPABASE_URL}/rest/v1/kiosk_devices?business_id=eq.${businessId}&order=created_at.desc`, {
         headers: {
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          'apikey': SUPABASE_ANON_KEY,
           'Content-Type': 'application/json',
         },
       });
@@ -242,7 +243,7 @@ export function SettingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
           businessId: businessId, // snake_case → camelCase 수정
@@ -276,7 +277,7 @@ export function SettingsPage() {
       const response = await fetch(`${SUPABASE_URL}/rest/v1/kiosk_devices?id=eq.${deviceId}`, {
         method: 'DELETE',
         headers: {
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          'apikey': SUPABASE_ANON_KEY,
           'Content-Type': 'application/json',
         },
       });
