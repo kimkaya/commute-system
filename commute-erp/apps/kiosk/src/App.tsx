@@ -23,7 +23,6 @@ import {
   Settings,
 } from 'lucide-react';
 import {
-  type Employee,
   verifyPassword,
   checkIn,
   checkOut,
@@ -33,6 +32,7 @@ import {
   getCurrentIP,
   authenticateKiosk,
 } from './lib/api';
+import type { Employee } from './lib/api';
 import { supabase } from './lib/supabase';
 
 function App() {
@@ -142,8 +142,15 @@ function App() {
 
   // 기기코드 인증
   const handleDeviceAuth = async () => {
-    if (!deviceCode.trim() || deviceCode.length !== 8) {
-      setAuthError('8자리 기기코드를 입력해주세요');
+    const trimmedCode = deviceCode.trim().toUpperCase();
+    
+    if (!trimmedCode) {
+      setAuthError('기기코드를 입력해주세요');
+      return;
+    }
+    
+    if (trimmedCode.length !== 8) {
+      setAuthError('기기코드는 8자리여야 합니다');
       return;
     }
 
@@ -151,7 +158,7 @@ function App() {
     setAuthError(null);
 
     try {
-      const result = await authenticateKiosk(deviceCode.trim().toUpperCase());
+      const result = await authenticateKiosk(trimmedCode);
 
       if (result.success && result.device_id) {
         registerDevice({
@@ -162,12 +169,13 @@ function App() {
           businessName: result.business_name,
         });
         setDeviceCode('');
+        setAuthError(null);
       } else {
-        setAuthError(result.error || '기기 인증에 실패했습니다');
+        setAuthError(result.error || '기기 인증에 실패했습니다. 관리자에게 문의하세요.');
       }
     } catch (err) {
       console.error('Device auth error:', err);
-      setAuthError('기기 인증 중 오류가 발생했습니다');
+      setAuthError('네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.');
     } finally {
       setIsAuthenticating(false);
     }
@@ -320,31 +328,48 @@ function App() {
           {/* 기기코드 입력 */}
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8">
             <div className="mb-6">
-              <label className="block text-white/80 text-sm mb-2">기기코드</label>
+              <label className="block text-white/80 text-sm font-medium mb-3">기기코드 (8자리)</label>
               <input
                 type="text"
                 value={deviceCode}
-                onChange={(e) => setDeviceCode(e.target.value.toUpperCase().slice(0, 8))}
-                placeholder="8자리 코드 입력"
-                className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center text-2xl tracking-widest font-mono placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                onChange={(e) => {
+                  const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+                  setDeviceCode(value);
+                  if (authError) setAuthError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && deviceCode.length === 8 && !isAuthenticating) {
+                    handleDeviceAuth();
+                  }
+                }}
+                placeholder="예: ABCD1234"
+                className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center text-2xl tracking-widest font-mono placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                 maxLength={8}
                 disabled={isAuthenticating}
+                autoFocus
               />
-              <p className="text-white/40 text-xs text-center mt-2">
-                관리자 페이지에서 발급받은 코드를 입력하세요
-              </p>
+              <div className="mt-3 flex items-start gap-2 text-white/40 text-xs">
+                <div className="mt-0.5">ℹ️</div>
+                <p>
+                  관리자 페이지에서 발급받은 8자리 코드를 입력하세요.<br />
+                  코드는 영문 대문자와 숫자로만 구성됩니다.
+                </p>
+              </div>
             </div>
 
             {authError && (
-              <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
-                <p className="text-red-400 text-sm text-center">{authError}</p>
+              <div className="mb-4 p-4 bg-red-500/20 border border-red-500/30 rounded-xl animate-shake">
+                <div className="flex items-start gap-2">
+                  <XCircle size={20} className="text-red-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-red-300 text-sm flex-1">{authError}</p>
+                </div>
               </div>
             )}
 
             <button
               onClick={handleDeviceAuth}
               disabled={isAuthenticating || deviceCode.length !== 8}
-              className="w-full py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl active:scale-95"
             >
               {isAuthenticating ? (
                 <>
@@ -416,10 +441,11 @@ function App() {
   if (screen === 'standby') {
     return (
       <div className="h-screen flex flex-col items-center justify-center p-8">
-        {/* 설정 버튼 */}
+        {/* 설정 버튼 - z-index 추가로 클릭 가능하도록 수정 */}
         <button
           onClick={() => setShowSettings(true)}
-          className="absolute top-4 right-4 p-3 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-lg transition-colors"
+          className="absolute top-4 right-4 p-3 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-lg transition-colors z-50"
+          aria-label="설정"
         >
           <Settings size={24} />
         </button>

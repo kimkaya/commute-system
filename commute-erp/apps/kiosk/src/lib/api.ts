@@ -15,7 +15,7 @@ const BUSINESS_ID = '00000000-0000-0000-0000-000000000001';
 // 키오스크 기기 인증 (기기코드로)
 // =====================================================
 
-export interface KioskAuthResult {
+export type KioskAuthResult = {
   success: boolean;
   device_id?: string;
   device_code?: string;
@@ -86,7 +86,7 @@ export async function getCurrentIP(): Promise<string> {
 }
 
 // IP 검증 결과 타입
-export interface IPValidationResult {
+export type IPValidationResult = {
   isValid: boolean;
   isApprovedDevice: boolean;
   isSuspicious: boolean;
@@ -280,7 +280,7 @@ export async function getDeviceStatus(businessId?: string): Promise<{
 // 타입 정의
 // =====================================================
 
-export interface Employee {
+export type Employee = {
   id: string;
   employee_number: string | null;
   name: string;
@@ -288,7 +288,7 @@ export interface Employee {
   position: string | null;
 }
 
-export interface AttendanceRecord {
+export type AttendanceRecord = {
   id: string;
   employee_id: string;
   date: string;
@@ -298,7 +298,7 @@ export interface AttendanceRecord {
   check_out_method: string | null;
 }
 
-export interface FaceTemplate {
+export type FaceTemplate = {
   id: string;
   employee_id: string;
   embedding: number[];
