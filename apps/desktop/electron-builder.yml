@@ -1,0 +1,81 @@
+appId: com.commutesystem.app
+productName: Commute System
+copyright: Copyright © 2024-2026 Commute System Team
+
+# Directories
+directories:
+  output: dist
+  buildResources: build
+
+# Files to include
+files:
+  - main.js
+  - preload.js
+  - package.json
+  - assets/**/*
+  - "!node_modules/**/*"
+
+# Extra resources
+extraResources:
+  - from: ../web/out
+    to: web
+    filter:
+      - "**/*"
+
+# Windows configuration
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Commute System
+
+# macOS configuration
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: build/icon.icns
+  category: public.app-category.business
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+dmg:
+  title: ${productName} ${version}
+  icon: build/icon.icns
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# Linux configuration
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  icon: build/icons
+  category: Office
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+# Publish configuration (for GitHub Releases)
+publish:
+  provider: github
+  owner: kimkaya
+  repo: commute-system
+  releaseType: release
